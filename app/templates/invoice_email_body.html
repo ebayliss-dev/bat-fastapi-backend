@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ subject }}</title>
+</head>
+
+<body
+    style="margin:0; padding:0; background:#f6f7fb; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f7fb; padding:24px 0;">
+        <tr>
+            <td align="center">
+                <table role="presentation" width="560" cellpadding="0" cellspacing="0"
+                    style="background:#ffffff; border-radius:12px; box-shadow:0 2px 8px rgba(16,24,40,0.06); overflow:hidden;">
+                    <!-- Logo -->
+                    <tr>
+                        <td style="padding:24px 24px 0 24px;" align="center">
+                            {% if logo_cid %}
+                            <img src="cid:{{ logo_cid }}" alt="{{ business_name }} logo"
+                                style="max-width:160px; height:auto; display:block; margin-bottom:8px;" />
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <!-- Title -->
+                    <tr>
+                        <td style="padding:0 24px 8px 24px;" align="center">
+                            <h1 style="margin:0; font-size:22px; line-height:28px; color:#0f172a;">
+                                Your invoice {{ reference }} is attached
+                            </h1>
+                        </td>
+                    </tr>
+                    <!-- Body -->
+                    <tr>
+                        <td style="padding:0 24px 16px 24px;" align="center">
+                            <p style="margin:0; font-size:15px; line-height:22px; color:#334155;">
+                                Hi {{ client_name }},<br />
+                                Please find attached your invoice <strong>{{ reference }}</strong> dated <strong>{{
+                                    invoice_date }}</strong>.
+                            </p>
+                        </td>
+                    </tr>
+                    <!-- Optional Pay Button -->
+                    {% if payment_link %}
+                    <tr>
+                        <td style="padding:8px 24px 24px 24px;" align="center">
+                            <a href="{{ payment_link }}"
+                                style="display:inline-block; text-decoration:none; font-weight:600; font-size:16px; line-height:20px; padding:12px 20px; border-radius:10px; background:#0f766e; color:#ffffff;">
+                                Pay Securely Online
+                            </a>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:0 24px 24px 24px;" align="left">
+                            <p style="margin:0; font-size:13px; line-height:20px; color:#475569;">
+                                Or copy and paste this link:<br />
+                                <a href="{{ payment_link }}" style="color:#0f766e; word-break:break-all;">{{
+                                    payment_link }}</a>
+                            </p>
+                        </td>
+                    </tr>
+                    {% endif %}
+                    <!-- Footer -->
+                    <tr>
+                        <td style="padding:0 24px 24px 24px;" align="left">
+                            <p style="margin:0; font-size:12px; line-height:18px; color:#64748b;">
+                                If you have already paid this invoice, please disregard this email.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+                <p style="margin:12px 0 0 0; font-size:11px; color:#94a3b8;">© {{ business_name or "Pawtul" }}</p>
+            </td>
+        </tr>
+    </table>
+</body>
+
+</html>

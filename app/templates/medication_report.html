@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <title>{{ medication_subject or "Medication Report" }}</title>
+    <style>
+        body {
+            font-family: Helvetica, Arial, sans-serif;
+            color: #1f2a2e;
+        }
+
+        .header {
+            border-bottom: 1px solid #e3f0ef;
+            padding: 8px 0;
+        }
+
+        .h1 {
+            font-size: 20px;
+            font-weight: 700;
+            margin: 0;
+        }
+
+        .muted {
+            color: #667085;
+            font-size: 12px;
+        }
+
+        .entry {
+            padding: 8px 0;
+            border-bottom: 1px dashed #e5e7eb;
+        }
+
+        .img {
+            margin-top: 6px;
+            max-width: 100%;
+            height: auto;
+        }
+
+        .row {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .logo {
+            height: 40px;
+        }
+
+        .avatar {
+            height: 40px;
+            width: 40px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .label {
+            font-weight: 600;
+            margin-top: 4px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header row">
+        {% if business_logo %}<img class="logo" src="{{ business_logo }}" />{% endif %}
+        <div>
+            <div class="h1">{{ business_name }}</div>
+            <div class="muted">{{ client_name }} • {{ client_address1 }} {{ client_postcode }}</div>
+            <div class="muted">{{ pet_name }}{% if pet_breed %} ({{ pet_breed }}){% endif %}</div>
+        </div>
+        {% if pet_avatar %}<img class="avatar" src="{{ pet_avatar }}" />{% endif %}
+
+    </div>
+
+    <h2>Medication: {{ medication_name or "N/A" }}</h2>
+    {% if medication_dosage %}<div class="muted">Dosage: {{ medication_dosage }}</div>{% endif %}
+    <div class="muted">Signed In: {{ signed_in or "" }}</div>
+    <div class="muted">Signed Out: {{ signed_out or "" }}</div>
+
+    <hr />
+
+    {% for e in entries %}
+    {% if not e.is_root %}
+    <div class="entry">
+        <div class="muted">{{ e.timestamp }}</div>
+        {% if e.subject %}<div class="label">{{ e.subject }}</div>{% endif %}
+        {% if e.medication %}<div>Medication: {{ e.medication }}</div>{% endif %}
+        {% if e.dosage %}<div>Dosage: {{ e.dosage }}</div>{% endif %}
+        {% if e.body %}<div>{{ e.body }}</div>{% endif %}
+
+        {% if e.administered_time %}<div>Administered: {{ e.administered_time }}</div>{% endif %}
+        {% if e.image %}
+        <img class="img" src="{{ e.image }}" />
+        {% endif %}
+    </div>
+    <hr />
+    {% endif %}
+    {% endfor %}
+
+</body>
+
+</html>

@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #e6f8f7;
+            color: #000;
+        }
+
+        table.outer {
+            width: 100%;
+            border-collapse: collapse;
+            min-height: 100vh;
+        }
+
+        td.sidebar {
+            width: 26%;
+            background-color: #e6f8f7;
+            color: black;
+            padding: 20px 18px 18px 18px;
+            vertical-align: top;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        td.content {
+            width: 74%;
+            background-color: #fff;
+            padding: 20px 40px 20px 40px;
+            vertical-align: top;
+            color: #000;
+        }
+
+        .sidebar h2 {
+            margin: 0 0 10px;
+            color: black;
+        }
+
+        .sidebar p,
+        .sidebar small {
+            font-size: 12px;
+            margin: 4px 0;
+        }
+
+        .invoice-header-fixed {
+            position: relative;
+            text-align: center;
+            margin-bottom: 20px;
+            margin-top: 0;
+        }
+
+        .center-info h1 {
+            margin: 0;
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        .center-info h2 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: normal;
+        }
+
+        .bill-to {
+            position: absolute;
+            top: 0;
+            right: 0;
+            text-align: right;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .right-align {
+            text-align: right;
+        }
+
+        table.items td,
+        table.summary td {
+            padding: 6px 8px;
+            border-bottom: 1px solid #eee;
+        }
+
+        table.items th,
+        table.summary th {
+            padding: 6px 8px;
+        }
+
+
+        .total-row {
+            background: #E0F2F1;
+            font-weight: bold;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 20px;
+            font-size: 12px;
+            color: #888;
+        }
+
+        a {
+            color: #009688;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        .items th:nth-child(1),
+        .items td:nth-child(1) {
+            width: 20%;
+        }
+
+        .items th:nth-child(2),
+        .items td:nth-child(2) {
+            width: 40%;
+        }
+
+        .items th:nth-child(3),
+        .items td:nth-child(3) {
+            width: 10%;
+        }
+
+        .items th:nth-child(4),
+        .items td:nth-child(4) {
+            width: 10%;
+        }
+
+        .items th:nth-child(5),
+        .items td:nth-child(5) {
+            width: 15%;
+        }
+    </style>
+</head>
+
+<body>
+    <table class="outer">
+        <tr>
+            <td class="sidebar">
+                <img src="{{json_data.logo}}" style="width:90px; margin-bottom: 10px;">
+                <p>{{json_data.business_addresss1}}<br>
+                    {{json_data.business_addresss2}}<br>
+                    {{json_data.business_addresss3}}<br>
+                    {{json_data.business_addresss4}}<br>
+                    {{json_data.business_postcode}}</p>
+
+                {% if json_data.vat_registered == true %}
+                <p>VAT No: {{json_data.vat_number}}</p>
+                {% endif %}
+                <hr>
+                <small>Bank: {{json_data.bank_name}}<br>
+                    Account: {{json_data.account_name}}<br>
+                    Sort Code: {{json_data.sort_code}}<br>
+                    Account No: {{json_data.account}}</small>
+                <hr>
+                <p><strong>Terms:</strong><br>{{json_data.payment_terms}}</p>
+            </td>
+            <td class="content">
+                <div class="invoice-header-fixed">
+                    <div class="center-info">
+                        <style>
+                            .tight {
+                                margin: 2px 0;
+                                /* adjust top/bottom spacing */
+                                line-height: 1.2;
+                                /* tighter line spacing */
+                            }
+                        </style>
+
+                        <h1 class="tight">{{json_data.business_name}}</h1>
+                        <h2 class="tight">Invoice: {{json_data.reference}}</h2>
+                        <h2 class="tight">Date: {{json_data.invoice_date}}</h2>
+
+                    </div>
+                    <div class="bill-to">
+                        <strong>Bill To:</strong><br>
+                        {{json_data.client_name}}<br>
+                        {{json_data.client_addresss1}}<br>
+                        {{json_data.client_addresss2}}<br>
+                        {{json_data.client_addresss3}}<br>
+                        {{json_data.client_addresss4}}<br>
+                        {{json_data.client_postcode}}
+                    </div>
+                </div>
+
+                <table class="items">
+                    <tr>
+                        <th style="width: 20%;">Item</th>
+                        <th style="width: 40%;">Description</th>
+                        <th style="width: 15%;" class="right-align">Rate</th>
+                        <th style="width: 10%;" class="right-align">Qty</th>
+                        <th style="width: 15%;" class="right-align">Price</th>
+
+                    </tr>
+                    {% set ns = namespace(discount=0) %}
+                    {% for i in json_data.invoice_items %}
+                    {% if i.item == 'Discount' %}
+                    <!-- <tr>
+                        <td>Discount {{ i.item_description }}:</td>
+                        <td class="right-align">-£{{ '%0.2f' | format(i.price | float) }}</td>
+                    </tr> -->
+                    {%else%}
+                    <tr>
+                        <td>{{ i.item }}</td>
+                        <td>{{ i.item_description if i.item_description else ' ' }}</td>
+                        <td class="right-align">£{{ '%0.2f' | format(i.rate | float) }}</td>
+                        <td class="right-align">{{ i.quantity }}</td>
+                        <td class="right-align">£{{ '%0.2f' | format(i.price | float) }}</td>
+                    </tr>
+
+                    {% endif %}
+                    {% endfor %}
+
+                </table>
+
+                <table class="summary">
+                    {% if json_data.vat_registered == true %}
+                    {% set exc_amount = json_data.amount | float %}
+                    {% set vat_amount = exc_amount * (json_data.vat_percentage | float / 100) %}
+                    {% set inc_amount = (exc_amount + vat_amount) | round(2) %}
+                    <!-- <tr>
+                        <td>Subtotal:</td>
+                        <td class="right-align">£{{ '%0.2f' | format(exc_amount) }}</td>
+                    </tr> -->
+                    <tr>
+                        <td>VAT ({{json_data.vat_percentage}}%):</td>
+                        <td class="right-align">£{{ '%0.2f' | format(vat_amount) }}</td>
+                    </tr>
+                    {% else %}
+                    {% set inc_amount = json_data.amount | float %}
+                    {% endif %}
+
+                    {% set ns = namespace(
+                    subtotal=0.0,
+                    discount_total=0.0,
+                    discounts=[]
+                    ) %}
+
+                    {# Loop through invoice items to calculate subtotal and collect discounts #}
+                    {% for i in json_data.invoice_items %}
+                    {% if i.item == 'Discount' %}
+                    {% set ns.discount_total = ns.discount_total + (i.price | float) %}
+                    {% set _ = ns.discounts.append({'description': i.item_description, 'price': i.price}) %}
+                    {% else %}
+                    {% set ns.subtotal = ns.subtotal + (i.price | float) %}
+                    {% endif %}
+                    {% endfor %}
+
+                    {# Sub Total Row (before discounts) #}
+                    <tr class="total-row">
+                        <td>Sub Total {% if json_data.vat_registered == true %}(inc VAT){% endif %}:</td>
+                        <td class="right-align">£{{ '%0.2f' | format(ns.subtotal) }}</td>
+                    </tr>
+
+                    {# Individual Discount Rows #}
+                    {% for d in ns.discounts %}
+                    <tr>
+                        <td>Discount: {{ d.description }}</td>
+                        <td class="right-align">-£{{ '%0.2f' | format(d.price | float) }}</td>
+                    </tr>
+                    {% endfor %}
+
+                    <tr class="total-row">
+                        <td>
+                            {% if json_data.vat_registered %}
+                            Total (inc VAT):
+                            {% else %}
+                            Total:
+                            {% endif %}
+                        </td>
+
+                        <td class="right-align">
+                            {% if json_data.vat_registered %}
+                            £{{ '%0.2f' | format(json_data.subtotal_with_vat) }}
+                            {% else %}
+                            £{{ '%0.2f' | format(json_data.subtotal_without_vat) }}
+                            {% endif %}
+                        </td>
+                    </tr>
+
+
+                </table>
+
+                {% if json_data.payment_link is not none %}
+                <p style="margin-top: 30px;">
+                    <a href="{{json_data.payment_link}}">Click here to pay now</a>
+                </p>
+                {% endif %}
+            </td>
+        </tr>
+    </table>
+
+    <div class="footer">
+        Made with love <a href="https://www.pawtul.com">www.pawtul.com</a>
+    </div>
+</body>
+
+</html>

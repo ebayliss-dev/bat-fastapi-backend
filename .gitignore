@@ -1,0 +1,59 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Virtual environment
+venv/
+.env/
+.env.*
+
+
+# VSCode / IDE settings
+.vscode/
+.idea/
+
+# Python tooling
+pip-log.txt
+pip-delete-this-directory.txt
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Pytest / test cache
+.pytest_cache/
+.tox/
+coverage.*
+htmlcov/
+.cache
+
+# MyPy / Pylint
+.mypy_cache/
+.dmypy.json
+.pyre/
+
+# Logs
+*.log
+
+# SQLite DBs or local data
+*.sqlite3
+*.db
+
+# FastAPI auto-reload cache (if used)
+__pydantic__/ 
+
+# Docker
+*.pid
+*.tar
+*.log
+
+# MacOS
+.DS_Store
+
+# Exported env files
+*.env.local
+*.env.example
