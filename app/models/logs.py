@@ -1,4 +1,4 @@
-from sqlalchemy import TIMESTAMP, BigInteger, Boolean, Column, Integer, String, DateTime, Text, ForeignKey
+from sqlalchemy import TIMESTAMP, BigInteger, Boolean, Column, Integer, LargeBinary, String, DateTime, Text, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -16,3 +16,4 @@ class Log(Base):
     uuid = Column(UUID(as_uuid=True), primary_key=True)
     body = Column(String)
     added = Column(TIMESTAMP)
+    image = Column(LargeBinary)

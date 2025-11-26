@@ -210,15 +210,7 @@ def refresh_access_token(payload: RefreshTokenRequest, db: Session = Depends(get
     }
 
 
-@router.post("/log")
-def add_log_event(
-    payload: dict,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
-):
-    print(payload)  # now valid
 
-    return {"received": payload}
 
 # ---------------------------------------------------------------------------
 # Avatar Asset Download Handling

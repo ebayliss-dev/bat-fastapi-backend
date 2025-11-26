@@ -244,7 +244,6 @@ async def get_all_beers(db: Session = Depends(get_db)):
     return output
 
 
-
 @router.post("/get")
 async def get_beer_by_id(payload: dict, db: Session = Depends(get_db)):
 
@@ -265,8 +264,10 @@ async def get_beer_by_id(payload: dict, db: Session = Depends(get_db)):
     base = dict(row)
 
     # Convert fields and rename created_at
-    base["id"] = str(base["id"])
-    base["pub_id"] = str(base["pub_id"])
+    if base.get("id"):
+        base["id"] = str(base["id"])
+    if base.get("pub_id"):
+        base["pub_id"] = str(base["pub_id"])
     if base.get("created_at"):
         base["added"] = str(base.pop("created_at"))
 
@@ -278,13 +279,15 @@ async def get_beer_by_id(payload: dict, db: Session = Depends(get_db)):
     beers = db.execute(
         text("""
             SELECT 
-                b.id::text AS beer_id,
-                p.id::text AS pub_id,
-                p.name AS pub_name,
-                b.sold_out
+                b.id::text   AS beer_id,
+                p.id::text   AS pub_id,
+                p.name       AS pub_name,
+                b.sold_out   AS sold_out,
+                b.status     AS status
             FROM public.beers b
             JOIN public.pubs p ON p.id = b.pub_id
-            WHERE b.productname = :product AND b.brewery = :brewery
+            WHERE b.productname = :product
+              AND b.brewery     = :brewery
         """),
         {"product": base["productname"], "brewery": base["brewery"]}
     ).mappings().all()
@@ -294,15 +297,24 @@ async def get_beer_by_id(payload: dict, db: Session = Depends(get_db)):
     pubs_sold_out = []
 
     for b in beers:
-        entry = {"pub_id": b["pub_id"], "pub_name": b["pub_name"]}
-        (pubs_sold_out if b["sold_out"] else pubs_serving).append(entry)
+        entry = {
+            "pub_id":  b["pub_id"],
+            "pub_name": b["pub_name"],
+            "status":  b["status"],    # 👈 IMPORTANT: per-pub status
+        }
+
+        if b["sold_out"]:
+            pubs_sold_out.append(entry)
+        else:
+            pubs_serving.append(entry)
 
     return {
         "beer": base,
         "pubs_serving": pubs_serving,
         "pubs_sold_out": pubs_sold_out,
-        "locations": len(pubs_serving)
+        "locations": len(pubs_serving),
     }
+
 
 
 
@@ -311,6 +323,7 @@ class BeerVoteCreate(BaseModel):
     pub: str   # 🔥 accepts pub name instead of id
     rating: int = Field(..., ge=1, le=5)
     review: Optional[str] = None
+    image_base64: Optional[str] = None
 
 class BeerVoteResponse(BaseModel):
     id: str
@@ -378,6 +391,7 @@ def add_favourite(
         "message": message
     }
 
+from base64 import b64decode
 
 @router.post("/rate")
 async def rate_beer_by_id(
@@ -385,23 +399,37 @@ async def rate_beer_by_id(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
-
     user = db.query(User).filter_by(id=str(current_user.id)).first()
     beer = db.query(Beer).filter_by(id=str(payload.beer_id)).first()
     pub  = db.query(Pub).filter_by(name=payload.pub).first()
 
-    if not beer: raise HTTPException(404, "Beer not found")
-    if not pub: raise HTTPException(404, f"Pub '{payload.pub}' not found")
+    if not beer:
+        raise HTTPException(404, "Beer not found")
+    if not pub:
+        raise HTTPException(404, f"Pub '{payload.pub}' not found")
 
-    # Get open event if it exists
-    event = db.execute(text("SELECT id FROM public.events WHERE isopen = true LIMIT 1")
-    ).mappings().first()
+    # ============================================================
+    # SAFE BASE64 → BYTEA HANDLING (NO MORE INVALID BASE64 ERRORS)
+    # ============================================================
+    image_bytes = None
+    if payload.image_base64:
+        try:
+            img = payload.image_base64.strip()
 
-    vote_id = str(uuid.uuid4())
+            # Support URIs like: data:image/jpeg;base64,xxxxxx
+            if img.startswith("data:"):
+                img = img.split(",", 1)[1]
 
-    # 🔍 Check if user already rated this beer at this pub
+            image_bytes = b64decode(img)
+
+        except Exception:
+            raise HTTPException(400, "Invalid base64 image format")
+
+
+    # Check if user's vote exists
     existing = db.execute(text("""
-        SELECT id, rating FROM public.beervotes 
+        SELECT id, rating 
+        FROM public.beervotes 
         WHERE beer_id = :beer_id AND user_id = :user_id AND pub_id = :pub_id
         LIMIT 1
     """), {
@@ -410,47 +438,53 @@ async def rate_beer_by_id(
         "pub_id": str(pub.id)
     }).mappings().first()
 
-    # Build beer rating bar (🍺 / ⚪)
-    rating_beers = "🍺" * payload.rating
+    rating_str = f"{payload.rating}/5"   # ← new rating display format
 
-    # ⭐ FIRST TIME VOTING — INSERT NEW VOTE + GIVE CREDITS
+
+    # =================================================================
+    # 🆕 FIRST TIME VOTE — INSERT INTO beervotes + LOG
+    # =================================================================
     if not existing:
+        vote_id = str(uuid.uuid4())
+
         db.execute(text("""
-            INSERT INTO public.beervotes (id, beer_id, pub_id, user_id, rating, event_id, created_at)
-            VALUES (:id, :beer_id, :pub_id, :user_id, :rating, :event_id, NOW())
+            INSERT INTO public.beervotes (id, beer_id, pub_id, user_id, rating, created_at)
+            VALUES (:id, :beer_id, :pub_id, :user_id, :rating, NOW())
         """), {
             "id": vote_id,
             "beer_id": str(payload.beer_id),
             "pub_id": str(pub.id),
             "user_id": str(user.id),
             "rating": payload.rating,
-            "event_id": event["id"] if event else None,
         })
 
-        # Log - NEW rating
+        # Log: Rating (image stored if provided)
         db.execute(text("""
-            INSERT INTO public.logs (uuid, body, added)
-            VALUES (:id, :body, NOW())
+            INSERT INTO public.logs (uuid, body, added, image)
+            VALUES (:id, :body, NOW(), :image)
         """), {
             "id": str(uuid.uuid4()),
-            "body": f"{user.user_name} rated {beer.productname} at {pub.name} {rating_beers}"
+            "body": f"{user.user_name} rated {beer.productname} at {pub.name} {rating_str}",
+            "image": image_bytes
         })
 
-        # Credits only FIRST TIME
-        db.execute(text("""
-            INSERT INTO public.logs (uuid, body, added)
-            VALUES (:id, :body, NOW())
-        """), {
-            "id": str(uuid.uuid4()),
-            "body": f"{user.user_name} earned 100 credits for rating {beer.productname} 🍺"
-        })
+        # Log: Review separately if provided
+        if payload.review:
+            db.execute(text("""
+                INSERT INTO public.logs (uuid, body, added, image)
+                VALUES (:id, :body, NOW(), NULL)
+            """), {
+                "id": str(uuid.uuid4()),
+                "body": f'{user.user_name} reviewed {beer.productname} at {pub.name}, they said:\n"{payload.review}"'
+            })
 
         db.commit()
-
         return {"success": True, "action": "new_rating", "rating": payload.rating}
 
 
-    # ♻ Already exists → UPDATE instead of INSERT
+    # =================================================================
+    # 🔁 EXISTING VOTE — UPDATE RATING + LOG UPDATE
+    # =================================================================
     db.execute(text("""
         UPDATE public.beervotes
         SET rating = :rating, updated_at = NOW()
@@ -460,15 +494,25 @@ async def rate_beer_by_id(
         "id": existing["id"]
     })
 
-    # Log UPDATE (NO CREDITS)
+    # Log rating update (with image if supplied)
     db.execute(text("""
-        INSERT INTO public.logs (uuid, body, added)
-        VALUES (:id, :body, NOW())
+        INSERT INTO public.logs (uuid, body, added, image)
+        VALUES (:id, :body, NOW(), :image)
     """), {
         "id": str(uuid.uuid4()),
-        "body": f"{user.user_name} updated rating for {beer.productname} at {pub.name} to {rating_beers}"
+        "body": f"{user.user_name} updated rating for {beer.productname} at {pub.name} to {rating_str}",
+        "image": image_bytes
     })
 
-    db.commit()
+    # Log review update if supplied
+    if payload.review:
+        db.execute(text("""
+            INSERT INTO public.logs (uuid, body, added, image)
+            VALUES (:id, :body, NOW(), NULL)
+        """), {
+            "id": str(uuid.uuid4()),
+            "body": f'{user.user_name} reviewed {beer.productname} at {pub.name}, they said:\n"{payload.review}"'
+        })
 
+    db.commit()
     return {"success": True, "action": "updated_rating", "rating": payload.rating}
