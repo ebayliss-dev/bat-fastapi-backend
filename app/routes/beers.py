@@ -12,8 +12,8 @@ from logging.handlers import RotatingFileHandler
 from werkzeug.security import check_password_hash
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, EmailStr
-from sqlalchemy import text
+from pydantic import BaseModel, EmailStr, Field, RootModel
+from sqlalchemy import and_, text
 from sqlalchemy.orm import Session
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -21,9 +21,11 @@ import stripe
 from jose import JWTError, jwt
 
 from app import crud
+from app.models.beers import Beer
+from app.models.pubs import Pub
+from app.models.user import User
 from app.schemas.login import LoginRequest
 from app.schemas.token import PasswordSubmitRequest, RefreshTokenRequest, Token
-from app.utils import stripe_util
 from ..database import get_db
 from ..auth import (
     REFRESH_SECRET_KEY,
@@ -60,64 +62,198 @@ router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
 
 
-class BeerOut(BaseModel):
-    id: str
-    pub_id: Optional[str] = None
-    name: str
-    brewery: Optional[str] = None
-    abv: Optional[str] = None
-    tasting_notes: Optional[str] = None
-    graphic: Optional[str] = None
-
-    # NEW FIELDS
-    archived: Optional[bool] = False
-    sold_out: Optional[bool] = False
-    new: Optional[bool] = False
-    added: Optional[str] = None
-
-    class Config:
-        from_attributes = True
 
 
+@router.post("/sync")
+async def sync_beers(db: Session = Depends(get_db)):
 
-@router.post("/all", response_model=List[BeerOut])
-async def get_all_beers(
-    db: Session = Depends(get_db),
-):
-    rows = db.execute(text("SELECT * FROM public.beers")).mappings().all()
+    # 1. Load all pubs + tokens
+    pubs = db.query(Pub).all()
+    token_map = {p.token: p.id for p in pubs if p.token}
 
-    normalised = []
-    for row in rows:
-        r = dict(row)
+    if not token_map:
+        raise HTTPException(404, "No pub tokens found")
 
-        # UUID → str
-        r["id"] = str(r["id"]) if r["id"] else None
-        r["pub_id"] = str(r["pub_id"]) if r.get("pub_id") else None
+    token_string = ",".join(token_map.keys())
+    url = f"https://www.realalefinder.com/beerboard/aggregate.php?tokens={token_string}"
 
-        # Ensure new booleans exist (DB defaults)
-        r["archived"] = r.get("archived", False)
-        r["sold_out"] = r.get("sold_out", False)
-        r["new"] = r.get("new", False)
+    # 2. Fetch data
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    raise HTTPException(resp.status, "Upstream RealAleFinder error")
+                payload = await resp.json()
+    except Exception as e:
+        raise HTTPException(500, str(e))
 
-        # Convert timestamp → string
-        if "added" in r and r["added"] is not None:
-            r["added"] = str(r["added"])
+    if "pubs" not in payload:
+        raise HTTPException(500, "Invalid RealAleFinder format")
 
-        normalised.append(r)
+    imported_count = 0
+    updated_count = 0
+    seen = set()
 
-    return normalised
+    # 3. Loop through pubs
+    for pub_entry in payload["pubs"]:
+        token = pub_entry["token"]
+        pub_id = token_map.get(token)
+        if not pub_id:
+            continue
+
+        beers = pub_entry["data"].get("beerlist", [])
+
+        for b in beers:
+
+            # UNIQUE MATCHING RULE (no duplicates)
+            existing = (
+                db.query(Beer)
+                .filter(
+                    and_(
+                        Beer.pub_id == pub_id,
+                        Beer.productname == b["productname"],
+                        Beer.brewery == b["brewery"]
+                    )
+                )
+                .first()
+            )
+
+            if existing:
+                seen.add(existing.id)
+
+                # Update beer
+                existing.pumpclip = b.get("pumpclip")
+                existing.pngpclip = b.get("pngpclip")
+                existing.abv = b.get("abv")
+                existing.tastingnotes = b.get("tastingnotes")
+                existing.price = b.get("price")
+                existing.tag = b.get("tag")
+                existing.ctype = b.get("ctype")
+                existing.style = b.get("style")
+                existing.stylecode = b.get("stylecode")
+                existing.colorfrom = b.get("colorfrom")
+                existing.colorto = b.get("colorto")
+                existing.shortstyledesc = b.get("shortstyledesc")
+                existing.status = b.get("status")
+                existing.allergens = b.get("allergens")
+                existing.allergens_text = b.get("allergens_text")
+
+                existing.sold_out = b.get("status") == "Sold Out"
+                existing.new = False
+
+                updated_count += 1
+
+            else:
+                # New beer
+                beer = Beer(
+                    pub_id=pub_id,
+                    pumpclip=b.get("pumpclip"),
+                    pngpclip=b.get("pngpclip"),
+                    brewery=b.get("brewery"),
+                    productname=b.get("productname"),
+                    abv=b.get("abv"),
+                    tastingnotes=b.get("tastingnotes"),
+                    price=b.get("price"),
+                    tag=b.get("tag"),
+                    ctype=b.get("ctype"),
+                    style=b.get("style"),
+                    stylecode=b.get("stylecode"),
+                    colorfrom=b.get("colorfrom"),
+                    colorto=b.get("colorto"),
+                    shortstyledesc=b.get("shortstyledesc"),
+                    status=b.get("status"),
+                    allergens=b.get("allergens"),
+                    allergens_text=b.get("allergens_text"),
+                    sold_out=b.get("status") == "Sold Out",
+                    new=True
+                )
+
+                db.add(beer)
+                db.flush()
+                seen.add(beer.id)
+
+                imported_count += 1
+
+    # 4. Set beers missing from API as sold out
+    all_beers = db.query(Beer).all()
+    for beer in all_beers:
+        if beer.id not in seen:
+            beer.sold_out = True
+            beer.new = False
+
+    db.commit()
+
+    # 5. Return summary
+    return {
+        "status": "success",
+        "pubs_processed": len(token_map),
+        "imported": imported_count,
+        "updated": updated_count,
+        "total_changed": imported_count + updated_count,
+    }
 
 
-@router.post("/get", response_model=BeerOut)
-def get_beer_by_id(
-    payload: dict,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
-):
+
+class BeerOut(RootModel[list[Dict[str, Any]]]):
+    pass
+
+
+@router.post("/all")
+async def get_all_beers(db: Session = Depends(get_db)):
+    query = text("""
+        SELECT 
+            b.id,
+            b.productname,
+            b.brewery,
+            b.abv,
+            b.tag,
+            b.style,
+            b.stylecode,
+            b.colorfrom,
+            b.colorto,
+            b.shortstyledesc,
+            b.tastingnotes,
+            b.price,
+            b.ctype,
+            b.allergens,
+            b.allergens_text,
+            b.status,
+            b.pngpclip,
+
+            ARRAY_AGG(DISTINCT p.name) AS pubs_serving,
+            ARRAY_AGG(DISTINCT p.id::text) AS pub_ids,
+            COUNT(DISTINCT p.id) AS locations
+
+        FROM public.beers b
+        JOIN public.pubs p ON p.id = b.pub_id
+        WHERE b.sold_out = FALSE
+        GROUP BY b.id                 -- 🔥 THIS FIXES DUPLICATES
+        ORDER BY locations DESC, productname ASC
+    """)
+
+    rows = db.execute(query).mappings().all()
+
+    output = []
+    for r in rows:
+        d = dict(r)  # 🔥 make editable
+
+        d["pubs_serving"] = sorted(list(r["pubs_serving"]))  # no duplicates
+        d["pub_ids"]      = sorted(list(r["pub_ids"]))        # no duplicates
+        output.append(d)
+
+    return output
+
+
+
+@router.post("/get")
+async def get_beer_by_id(payload: dict, db: Session = Depends(get_db)):
+
+    # Extract ID from JSON body
     beer_id = payload.get("id")
     if not beer_id:
         raise HTTPException(status_code=400, detail="Beer ID missing")
 
+    # 1) Fetch base beer by ID
     row = db.execute(
         text("SELECT * FROM public.beers WHERE id = :id"),
         {"id": beer_id}
@@ -126,15 +262,213 @@ def get_beer_by_id(
     if not row:
         raise HTTPException(status_code=404, detail="Beer not found")
 
-    r = dict(row)
+    base = dict(row)
 
-    # UUID → string
-    r["id"] = str(r["id"])
-    r["pub_id"] = str(r["pub_id"]) if r.get("pub_id") else None
+    # Convert fields and rename created_at
+    base["id"] = str(base["id"])
+    base["pub_id"] = str(base["pub_id"])
+    if base.get("created_at"):
+        base["added"] = str(base.pop("created_at"))
 
-    # Convert timestamp → string
-    if r.get("added"):
-        r["added"] = str(r["added"])
+    base.setdefault("sold_out", False)
+    base.setdefault("new", False)
+    base.setdefault("archived", False)
 
-    return r
+    # 2) Fetch all matching beers with the same product+brewery
+    beers = db.execute(
+        text("""
+            SELECT 
+                b.id::text AS beer_id,
+                p.id::text AS pub_id,
+                p.name AS pub_name,
+                b.sold_out
+            FROM public.beers b
+            JOIN public.pubs p ON p.id = b.pub_id
+            WHERE b.productname = :product AND b.brewery = :brewery
+        """),
+        {"product": base["productname"], "brewery": base["brewery"]}
+    ).mappings().all()
 
+    # 3) Split into serving vs sold-out
+    pubs_serving = []
+    pubs_sold_out = []
+
+    for b in beers:
+        entry = {"pub_id": b["pub_id"], "pub_name": b["pub_name"]}
+        (pubs_sold_out if b["sold_out"] else pubs_serving).append(entry)
+
+    return {
+        "beer": base,
+        "pubs_serving": pubs_serving,
+        "pubs_sold_out": pubs_sold_out,
+        "locations": len(pubs_serving)
+    }
+
+
+
+class BeerVoteCreate(BaseModel):
+    beer_id: str
+    pub: str   # 🔥 accepts pub name instead of id
+    rating: int = Field(..., ge=1, le=5)
+    review: Optional[str] = None
+
+class BeerVoteResponse(BaseModel):
+    id: str
+    beer_id: str
+    pub_id: str
+    user_id: str
+    rating: int
+    review: Optional[str]
+    created_at: str
+
+    class Config:
+        orm_mode = True
+
+
+@router.post("/favourite")
+def add_favourite(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    user = db.query(User).filter_by(id=str(current_user.id)).first()
+    beer_id = payload.get("beer_id")
+    action = payload.get("action")  # "add" or "remove"
+
+    if not beer_id:
+        raise HTTPException(status_code=400, detail="beer_id required")
+
+    if action not in ["add", "remove"]:
+        raise HTTPException(status_code=400, detail="action must be add/remove")
+
+
+    # 🔥 Fetch beer name for log
+    row = db.execute(
+        text("SELECT productname FROM beers WHERE id = :id"),
+        {"id": beer_id}
+    ).mappings().first()
+
+    beer_name = row["productname"] if row else "Unknown Beer"
+    username = user.user_name or "Unknown User"
+
+
+    # Build log text
+    message = (
+        f"{username} favourited {beer_name}"
+        if action == "add"
+        else f"{username} removed {beer_name} from favourites"
+    )
+
+
+    # 🔥 Insert into logs table
+    db.execute(text("""
+        INSERT INTO public.logs (uuid, body, added)
+        VALUES (:id, :body, NOW())
+    """), {
+        "id": str(uuid.uuid4()),
+        "body": message
+    })
+
+    db.commit()
+
+    return {
+        "status": "ok",
+        "action": action,
+        "beer_id": beer_id,
+        "message": message
+    }
+
+
+@router.post("/rate")
+async def rate_beer_by_id(
+    payload: BeerVoteCreate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+
+    user = db.query(User).filter_by(id=str(current_user.id)).first()
+    beer = db.query(Beer).filter_by(id=str(payload.beer_id)).first()
+    pub  = db.query(Pub).filter_by(name=payload.pub).first()
+
+    if not beer: raise HTTPException(404, "Beer not found")
+    if not pub: raise HTTPException(404, f"Pub '{payload.pub}' not found")
+
+    # Get open event if it exists
+    event = db.execute(text("SELECT id FROM public.events WHERE isopen = true LIMIT 1")
+    ).mappings().first()
+
+    vote_id = str(uuid.uuid4())
+
+    # 🔍 Check if user already rated this beer at this pub
+    existing = db.execute(text("""
+        SELECT id, rating FROM public.beervotes 
+        WHERE beer_id = :beer_id AND user_id = :user_id AND pub_id = :pub_id
+        LIMIT 1
+    """), {
+        "beer_id": str(payload.beer_id),
+        "user_id": str(user.id),
+        "pub_id": str(pub.id)
+    }).mappings().first()
+
+    # Build beer rating bar (🍺 / ⚪)
+    rating_beers = "🍺" * payload.rating
+
+    # ⭐ FIRST TIME VOTING — INSERT NEW VOTE + GIVE CREDITS
+    if not existing:
+        db.execute(text("""
+            INSERT INTO public.beervotes (id, beer_id, pub_id, user_id, rating, event_id, created_at)
+            VALUES (:id, :beer_id, :pub_id, :user_id, :rating, :event_id, NOW())
+        """), {
+            "id": vote_id,
+            "beer_id": str(payload.beer_id),
+            "pub_id": str(pub.id),
+            "user_id": str(user.id),
+            "rating": payload.rating,
+            "event_id": event["id"] if event else None,
+        })
+
+        # Log - NEW rating
+        db.execute(text("""
+            INSERT INTO public.logs (uuid, body, added)
+            VALUES (:id, :body, NOW())
+        """), {
+            "id": str(uuid.uuid4()),
+            "body": f"{user.user_name} rated {beer.productname} at {pub.name} {rating_beers}"
+        })
+
+        # Credits only FIRST TIME
+        db.execute(text("""
+            INSERT INTO public.logs (uuid, body, added)
+            VALUES (:id, :body, NOW())
+        """), {
+            "id": str(uuid.uuid4()),
+            "body": f"{user.user_name} earned 100 credits for rating {beer.productname} 🍺"
+        })
+
+        db.commit()
+
+        return {"success": True, "action": "new_rating", "rating": payload.rating}
+
+
+    # ♻ Already exists → UPDATE instead of INSERT
+    db.execute(text("""
+        UPDATE public.beervotes
+        SET rating = :rating, updated_at = NOW()
+        WHERE id = :id
+    """), {
+        "rating": payload.rating,
+        "id": existing["id"]
+    })
+
+    # Log UPDATE (NO CREDITS)
+    db.execute(text("""
+        INSERT INTO public.logs (uuid, body, added)
+        VALUES (:id, :body, NOW())
+    """), {
+        "id": str(uuid.uuid4()),
+        "body": f"{user.user_name} updated rating for {beer.productname} at {pub.name} to {rating_beers}"
+    })
+
+    db.commit()
+
+    return {"success": True, "action": "updated_rating", "rating": payload.rating}

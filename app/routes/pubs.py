@@ -23,7 +23,6 @@ from jose import JWTError, jwt
 from app import crud
 from app.schemas.login import LoginRequest
 from app.schemas.token import PasswordSubmitRequest, RefreshTokenRequest, Token
-from app.utils import stripe_util
 from ..database import get_db
 from ..auth import (
     REFRESH_SECRET_KEY,

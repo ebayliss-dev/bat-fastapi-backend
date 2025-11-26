@@ -25,7 +25,6 @@ from app.models.logs import Log
 from app.models.user import User
 from app.schemas.login import LoginRequest
 from app.schemas.token import PasswordSubmitRequest, RefreshTokenRequest, Token
-from app.utils import stripe_util
 from ..database import get_db
 from ..auth import (
     REFRESH_SECRET_KEY,
@@ -150,7 +149,7 @@ async def get_latest_logs(db: Session = Depends(get_db)):
     rows = (
         db.query(Log)
         .order_by(Log.added.desc())
-        .limit(3)
+        .limit(100)
         .all()
     )
 

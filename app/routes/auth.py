@@ -22,7 +22,6 @@ from jose import JWTError, jwt
 from app import crud
 from app.schemas.login import LoginRequest
 from app.schemas.token import PasswordSubmitRequest, RefreshTokenRequest, Token
-from app.utils import stripe_util
 from ..database import get_db
 from ..auth import (
     REFRESH_SECRET_KEY,
@@ -211,7 +210,15 @@ def refresh_access_token(payload: RefreshTokenRequest, db: Session = Depends(get
     }
 
 
+@router.post("/log")
+def add_log_event(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    print(payload)  # now valid
 
+    return {"received": payload}
 
 # ---------------------------------------------------------------------------
 # Avatar Asset Download Handling

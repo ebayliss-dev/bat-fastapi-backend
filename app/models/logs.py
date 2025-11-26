@@ -11,6 +11,8 @@ Base = declarative_base()
 
 class Log(Base):
     __tablename__ = "logs"
+    __table_args__ = {"schema": "public"}
+
     uuid = Column(UUID(as_uuid=True), primary_key=True)
     body = Column(String)
     added = Column(TIMESTAMP)
