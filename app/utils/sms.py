@@ -8,11 +8,7 @@ def send_magic_link_sms(phone: str, link: str):
     client = vonage.Client(key="fb59843d", secret=os.getenv("VONAGE_API_SECRET"))
     sms = vonage.Sms(client)
 
-    message = (
-        "Burton Ale Trail\n\n"
-        f"Tap below to log in:\n{link}\n\n"
-        "This link expires in 15 minutes."
-    )
+    message = link
 
     response = sms.send_message(
         {
