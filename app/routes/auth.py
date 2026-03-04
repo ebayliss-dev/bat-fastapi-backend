@@ -369,7 +369,7 @@ async def request_magic_link(payload: dict, db: Session = Depends(get_db)):
     db.add(db_token)
     db.commit()
 
-    base_url = os.getenv("MAGIC_LINK_BASE", "http://localhost:8081/magic")
+    base_url = os.getenv("MAGIC_LINK_BASE", "https://burtonaletrail.com/magic")
 
     link = f"{base_url}?token={token}"
 
