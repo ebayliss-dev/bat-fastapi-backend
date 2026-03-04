@@ -1,0 +1,20 @@
+from sqlalchemy import TIMESTAMP, BigInteger, Boolean, Column, Integer, LargeBinary, String, DateTime, Text, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+import uuid
+
+Base = declarative_base()
+
+
+
+class Log(Base):
+    __tablename__ = "logs"
+    __table_args__ = {"schema": "public"}
+
+    uuid = Column(UUID(as_uuid=True), primary_key=True)
+    user_id = Column(UUID)
+    body = Column(String)
+    added = Column(TIMESTAMP)
+    image = Column(LargeBinary)

@@ -1,0 +1,172 @@
+2025-11-04 09:53:45 [INFO] Vet search initiated for query='Medi', lat=None, lng=None, radius=15000
+2025-11-04 09:53:46 [DEBUG] Google Places returned 20 results for 'Medi'
+2025-11-04 09:53:46 [DEBUG] Fetching phone for place_id=ChIJw9kCZRfAeUgR0KF7ymN1ey8
+2025-11-04 09:53:46 [DEBUG] Fetching phone for place_id=ChIJVVVBpQ7BeUgRQg5Aa1KElOw
+2025-11-04 09:53:46 [DEBUG] Fetching phone for place_id=ChIJgRFqocOTeUgRbMHOk9l-ZBc
+2025-11-04 09:53:46 [DEBUG] Fetching phone for place_id=ChIJ09ytDBnreUgRXwKxyaMztes
+2025-11-04 09:53:46 [DEBUG] Fetching phone for place_id=ChIJkyVTcMe9eUgRRHBu4GmM6kg
+2025-11-04 09:53:46 [DEBUG] Fetching phone for place_id=ChIJWU6qIbtKeEgR3siTUBAbKV4
+2025-11-04 09:53:46 [DEBUG] Fetching phone for place_id=ChIJbfmQAm29eUgRmBJgln-pND0
+2025-11-04 09:53:46 [DEBUG] Fetching phone for place_id=ChIJVx4RBtvAeUgRp4rSrabx8wg
+2025-11-04 09:53:46 [DEBUG] Fetching phone for place_id=ChIJn7xS2SaUeUgRsGmsJGBrAEY
+2025-11-04 09:53:46 [DEBUG] Fetching phone for place_id=ChIJLQML4qLGeUgRirY_GFo1qEA
+2025-11-04 09:53:46 [DEBUG] Fetching phone for place_id=ChIJoSdAHzzpeUgRhk3LcWe8Rn4
+2025-11-04 09:53:46 [DEBUG] Fetching phone for place_id=ChIJL93SuLfpeUgRYODNOd1Fkes
+2025-11-04 09:53:46 [DEBUG] Fetching phone for place_id=ChIJAQAA5GxyeUgRLX1GuMQOb3k
+2025-11-04 09:53:46 [DEBUG] Fetching phone for place_id=ChIJdbx7zpK9eUgR1O4WCCaF41c
+2025-11-04 09:53:46 [DEBUG] Fetching phone for place_id=ChIJ1f9bdpLDeUgRG0MAyARyXqA
+2025-11-04 09:53:46 [DEBUG] Got phone for ChIJoSdAHzzpeUgRhk3LcWe8Rn4: 0115 939 9010
+2025-11-04 09:53:46 [DEBUG] Got phone for ChIJn7xS2SaUeUgRsGmsJGBrAEY: 01623 555460
+2025-11-04 09:53:46 [DEBUG] Got phone for ChIJAQAA5GxyeUgRLX1GuMQOb3k: 01709 897354
+2025-11-04 09:53:46 [DEBUG] Got phone for ChIJdbx7zpK9eUgR1O4WCCaF41c: 01623 623061
+2025-11-04 09:53:46 [DEBUG] Got phone for ChIJgRFqocOTeUgRbMHOk9l-ZBc: 01773 832218
+2025-11-04 09:53:46 [DEBUG] Got phone for ChIJ1f9bdpLDeUgRG0MAyARyXqA: 0115 693 0010
+2025-11-04 09:53:46 [DEBUG] Got phone for ChIJLQML4qLGeUgRirY_GFo1qEA: 0115 940 4474
+2025-11-04 09:53:46 [DEBUG] Got phone for ChIJbfmQAm29eUgRmBJgln-pND0: 01623 620784
+2025-11-04 09:53:46 [DEBUG] Got phone for ChIJWU6qIbtKeEgR3siTUBAbKV4: 01636 701523
+2025-11-04 09:53:46 [DEBUG] Got phone for ChIJw9kCZRfAeUgR0KF7ymN1ey8: 0115 927 4458
+2025-11-04 09:53:46 [DEBUG] Got phone for ChIJ09ytDBnreUgRXwKxyaMztes: 0115 952 7271
+2025-11-04 09:53:46 [DEBUG] Got phone for ChIJVx4RBtvAeUgRp4rSrabx8wg: 0115 967 1117
+2025-11-04 09:53:46 [DEBUG] Got phone for ChIJVVVBpQ7BeUgRQg5Aa1KElOw: 0115 962 1010
+2025-11-04 09:53:46 [DEBUG] Got phone for ChIJL93SuLfpeUgRYODNOd1Fkes: 0115 922 4855
+2025-11-04 09:53:46 [DEBUG] Got phone for ChIJkyVTcMe9eUgRRHBu4GmM6kg: 01623 621019
+2025-11-04 09:53:46 [DEBUG] Phone enrichment completed for 15 places.
+2025-11-04 09:53:46 [INFO] Returning 20 vet results for query='Medi'
+2025-11-04 09:53:54 [INFO] Vet search initiated for query='Medivet', lat=None, lng=None, radius=15000
+2025-11-04 09:53:55 [DEBUG] Google Places returned 20 results for 'Medivet'
+2025-11-04 09:53:55 [DEBUG] Fetching phone for place_id=ChIJgRFqocOTeUgRbMHOk9l-ZBc
+2025-11-04 09:53:55 [DEBUG] Fetching phone for place_id=ChIJ09ytDBnreUgRXwKxyaMztes
+2025-11-04 09:53:55 [DEBUG] Fetching phone for place_id=ChIJw9kCZRfAeUgR0KF7ymN1ey8
+2025-11-04 09:53:55 [DEBUG] Fetching phone for place_id=ChIJVVVBpQ7BeUgRQg5Aa1KElOw
+2025-11-04 09:53:55 [DEBUG] Fetching phone for place_id=ChIJLQML4qLGeUgRirY_GFo1qEA
+2025-11-04 09:53:55 [DEBUG] Fetching phone for place_id=ChIJoSdAHzzpeUgRhk3LcWe8Rn4
+2025-11-04 09:53:55 [DEBUG] Fetching phone for place_id=ChIJ1f9bdpLDeUgRG0MAyARyXqA
+2025-11-04 09:53:55 [DEBUG] Fetching phone for place_id=ChIJAbG6AHCJeUgRZbFzwwHLjMY
+2025-11-04 09:53:55 [DEBUG] Fetching phone for place_id=ChIJVx4RBtvAeUgRp4rSrabx8wg
+2025-11-04 09:53:55 [DEBUG] Fetching phone for place_id=ChIJefM00InBeUgRn9u2LLEZYcE
+2025-11-04 09:53:55 [DEBUG] Fetching phone for place_id=ChIJL93SuLfpeUgRYODNOd1Fkes
+2025-11-04 09:53:55 [DEBUG] Fetching phone for place_id=ChIJWU6qIbtKeEgR3siTUBAbKV4
+2025-11-04 09:53:55 [DEBUG] Fetching phone for place_id=ChIJAQAA5GxyeUgRLX1GuMQOb3k
+2025-11-04 09:53:55 [DEBUG] Fetching phone for place_id=ChIJq6ruyXpxeUgRflwA4pMRfZk
+2025-11-04 09:53:55 [DEBUG] Fetching phone for place_id=ChIJDal_PxnxeUgRZIArt6gw2rU
+2025-11-04 09:53:55 [DEBUG] Got phone for ChIJoSdAHzzpeUgRhk3LcWe8Rn4: 0115 939 9010
+2025-11-04 09:53:55 [DEBUG] Got phone for ChIJVVVBpQ7BeUgRQg5Aa1KElOw: 0115 962 1010
+2025-11-04 09:53:55 [DEBUG] Got phone for ChIJLQML4qLGeUgRirY_GFo1qEA: 0115 940 4474
+2025-11-04 09:53:55 [DEBUG] Got phone for ChIJw9kCZRfAeUgR0KF7ymN1ey8: 0115 927 4458
+2025-11-04 09:53:55 [DEBUG] Got phone for ChIJ1f9bdpLDeUgRG0MAyARyXqA: 0115 693 0010
+2025-11-04 09:53:55 [DEBUG] Got phone for ChIJAQAA5GxyeUgRLX1GuMQOb3k: 01709 897354
+2025-11-04 09:53:55 [DEBUG] Got phone for ChIJefM00InBeUgRn9u2LLEZYcE: 0115 939 9010
+2025-11-04 09:53:55 [DEBUG] Got phone for ChIJWU6qIbtKeEgR3siTUBAbKV4: 01636 701523
+2025-11-04 09:53:55 [DEBUG] Got phone for ChIJ09ytDBnreUgRXwKxyaMztes: 0115 952 7271
+2025-11-04 09:53:55 [DEBUG] Got phone for ChIJgRFqocOTeUgRbMHOk9l-ZBc: 01773 832218
+2025-11-04 09:53:55 [DEBUG] Got phone for ChIJVx4RBtvAeUgRp4rSrabx8wg: 0115 967 1117
+2025-11-04 09:53:55 [DEBUG] Got phone for ChIJL93SuLfpeUgRYODNOd1Fkes: 0115 922 4855
+2025-11-04 09:53:55 [DEBUG] Got phone for ChIJq6ruyXpxeUgRflwA4pMRfZk: 01709 760301
+2025-11-04 09:53:55 [DEBUG] Got phone for ChIJDal_PxnxeUgRZIArt6gw2rU: 01332 345119
+2025-11-04 09:53:55 [DEBUG] Got phone for ChIJAbG6AHCJeUgRZbFzwwHLjMY: 01629 582844
+2025-11-04 09:53:55 [DEBUG] Phone enrichment completed for 15 places.
+2025-11-04 09:53:55 [INFO] Returning 20 vet results for query='Medivet'
+2025-11-04 09:53:59 [INFO] Vet search initiated for query='Medivet Burton', lat=None, lng=None, radius=15000
+2025-11-04 09:53:59 [DEBUG] Google Places returned 1 results for 'Medivet Burton'
+2025-11-04 09:53:59 [DEBUG] Fetching phone for place_id=ChIJL7rhhPgCekgRVC36HiVu48M
+2025-11-04 09:53:59 [DEBUG] Got phone for ChIJL7rhhPgCekgRVC36HiVu48M: 01283 541608
+2025-11-04 09:53:59 [DEBUG] Phone enrichment completed for 1 places.
+2025-11-04 09:53:59 [INFO] Returning 1 vet results for query='Medivet Burton'
+2025-11-04 09:54:00 [INFO] Saving vet for pet_id=be02a706-19dd-4615-9909-3591b5311267 | place_id=ChIJL7rhhPgCekgRVC36HiVu48M
+2025-11-04 09:54:00 [DEBUG] Vet payload: name=Medivet Burton-on-Trent, phone=01283 541608, address=30 Horninglow Rd N, Burton-on-Trent DE13 0SL
+2025-11-04 09:54:00 [INFO] Vet info saved successfully for pet_id=be02a706-19dd-4615-9909-3591b5311267
+2025-11-04 09:54:05 [INFO] Vet search initiated for query='Medivet Burton', lat=None, lng=None, radius=15000
+2025-11-04 09:54:05 [DEBUG] Google Places returned 1 results for 'Medivet Burton'
+2025-11-04 09:54:05 [DEBUG] Fetching phone for place_id=ChIJL7rhhPgCekgRVC36HiVu48M
+2025-11-04 09:54:05 [DEBUG] Got phone for ChIJL7rhhPgCekgRVC36HiVu48M: 01283 541608
+2025-11-04 09:54:05 [DEBUG] Phone enrichment completed for 1 places.
+2025-11-04 09:54:05 [INFO] Returning 1 vet results for query='Medivet Burton'
+2025-11-04 09:54:06 [INFO] Saving vet for pet_id=be02a706-19dd-4615-9909-3591b5311267 | place_id=ChIJL7rhhPgCekgRVC36HiVu48M
+2025-11-04 09:54:06 [DEBUG] Vet payload: name=Medivet Burton-on-Trent, phone=01283 541608, address=30 Horninglow Rd N, Burton-on-Trent DE13 0SL
+2025-11-04 09:54:06 [INFO] Vet info saved successfully for pet_id=be02a706-19dd-4615-9909-3591b5311267
+2025-11-05 10:44:14 [INFO] Vet search initiated for query='Higher', lat=None, lng=None, radius=15000
+2025-11-05 10:44:14 [DEBUG] Google Places returned 20 results for 'Higher'
+2025-11-05 10:44:14 [DEBUG] Fetching phone for place_id=ChIJbfmQAm29eUgRmBJgln-pND0
+2025-11-05 10:44:14 [DEBUG] Fetching phone for place_id=ChIJdXTTJrS9eUgR3uzPL3aU52I
+2025-11-05 10:44:14 [DEBUG] Fetching phone for place_id=ChIJC0Zh_0i-eUgRg58eLznDsiY
+2025-11-05 10:44:14 [DEBUG] Fetching phone for place_id=ChIJechWK9G8eUgRuMpRFpnhLLU
+2025-11-05 10:44:14 [DEBUG] Fetching phone for place_id=ChIJw9kCZRfAeUgR0KF7ymN1ey8
+2025-11-05 10:44:14 [DEBUG] Fetching phone for place_id=ChIJkyVTcMe9eUgRRHBu4GmM6kg
+2025-11-05 10:44:14 [DEBUG] Fetching phone for place_id=ChIJh_7JUImXeUgRhhGcWpxfYWE
+2025-11-05 10:44:14 [DEBUG] Fetching phone for place_id=ChIJ09ytDBnreUgRXwKxyaMztes
+2025-11-05 10:44:14 [DEBUG] Fetching phone for place_id=ChIJmTf289uVeUgRDab66yiBYcU
+2025-11-05 10:44:14 [DEBUG] Fetching phone for place_id=ChIJzxvn7c6XeUgR_Wa23-Plxss
+2025-11-05 10:44:14 [DEBUG] Fetching phone for place_id=ChIJXzvCcQbseUgRN8NFO8xyCgc
+2025-11-05 10:44:14 [DEBUG] Fetching phone for place_id=ChIJq0VFfU-8eUgR1vguHdy88nE
+2025-11-05 10:44:14 [DEBUG] Fetching phone for place_id=ChIJn7xS2SaUeUgRsGmsJGBrAEY
+2025-11-05 10:44:14 [DEBUG] Fetching phone for place_id=ChIJ2a11K1OReUgR6iZjna1TK-U
+2025-11-05 10:44:14 [DEBUG] Fetching phone for place_id=ChIJdbx7zpK9eUgR1O4WCCaF41c
+2025-11-05 10:44:14 [DEBUG] Got phone for ChIJkyVTcMe9eUgRRHBu4GmM6kg: 01623 621019
+2025-11-05 10:44:14 [DEBUG] Got phone for ChIJXzvCcQbseUgRN8NFO8xyCgc: 0115 932 6056
+2025-11-05 10:44:14 [DEBUG] Got phone for ChIJh_7JUImXeUgRhhGcWpxfYWE: 01623 579579
+2025-11-05 10:44:15 [DEBUG] Got phone for ChIJw9kCZRfAeUgR0KF7ymN1ey8: 0115 927 4458
+2025-11-05 10:44:15 [DEBUG] Got phone for ChIJdXTTJrS9eUgR3uzPL3aU52I: 01623 643888
+2025-11-05 10:44:15 [DEBUG] Got phone for ChIJn7xS2SaUeUgRsGmsJGBrAEY: 01623 555460
+2025-11-05 10:44:15 [DEBUG] Got phone for ChIJ2a11K1OReUgR6iZjna1TK-U: 07720 836192
+2025-11-05 10:44:15 [DEBUG] Got phone for ChIJbfmQAm29eUgRmBJgln-pND0: 01623 620784
+2025-11-05 10:44:15 [DEBUG] Got phone for ChIJC0Zh_0i-eUgRg58eLznDsiY: 01623 888503
+2025-11-05 10:44:15 [DEBUG] Got phone for ChIJdbx7zpK9eUgR1O4WCCaF41c: 01623 623061
+2025-11-05 10:44:15 [DEBUG] Got phone for ChIJ09ytDBnreUgRXwKxyaMztes: 0115 952 7271
+2025-11-05 10:44:15 [DEBUG] Got phone for ChIJmTf289uVeUgRDab66yiBYcU: 01623 442718
+2025-11-05 10:44:15 [DEBUG] Got phone for ChIJechWK9G8eUgRuMpRFpnhLLU: 01623 846671
+2025-11-05 10:44:15 [DEBUG] Got phone for ChIJq0VFfU-8eUgR1vguHdy88nE: 07926 740344
+2025-11-05 10:44:15 [DEBUG] Got phone for ChIJzxvn7c6XeUgR_Wa23-Plxss: 01623 203529
+2025-11-05 10:44:15 [DEBUG] Phone enrichment completed for 15 places.
+2025-11-05 10:44:15 [INFO] Returning 20 vet results for query='Higher'
+2025-11-05 10:44:18 [INFO] Vet search initiated for query='Highertown', lat=None, lng=None, radius=15000
+2025-11-05 10:44:19 [DEBUG] Google Places returned 1 results for 'Highertown'
+2025-11-05 10:44:19 [DEBUG] Fetching phone for place_id=ChIJYwwYOrkXa0gR4Tv94rTdjYA
+2025-11-05 10:44:19 [DEBUG] Got phone for ChIJYwwYOrkXa0gR4Tv94rTdjYA: 01872 273408
+2025-11-05 10:44:19 [DEBUG] Phone enrichment completed for 1 places.
+2025-11-05 10:44:19 [INFO] Returning 1 vet results for query='Highertown'
+2025-11-05 10:44:23 [INFO] Saving vet for pet_id=3811bffb-84d1-4b1d-a418-c1b6d14b0d81 | place_id=ChIJYwwYOrkXa0gR4Tv94rTdjYA
+2025-11-05 10:44:23 [DEBUG] Vet payload: name=Highertown Veterinary Clinic, phone=01872 273408, address=23 Highertown, Truro TR1 3QE
+2025-11-05 10:44:24 [INFO] Vet info saved successfully for pet_id=3811bffb-84d1-4b1d-a418-c1b6d14b0d81
+2025-11-21 08:56:18 [INFO] Vet search initiated for query='Glentho', lat=None, lng=None, radius=15000
+2025-11-21 08:56:19 [DEBUG] Google Places returned 20 results for 'Glentho'
+2025-11-21 08:56:19 [DEBUG] Fetching phone for place_id=ChIJv5PQdMNHiEgR92OKFZ4ityU
+2025-11-21 08:56:19 [DEBUG] Fetching phone for place_id=ChIJyZQAzZV5iEgRzqWySN_zzXI
+2025-11-21 08:56:19 [DEBUG] Fetching phone for place_id=ChIJv5oPzPh4iEgRQfuWc63oqfY
+2025-11-21 08:56:19 [DEBUG] Fetching phone for place_id=ChIJc_MoztlpiEgRjQhzj67FMHU
+2025-11-21 08:56:19 [DEBUG] Fetching phone for place_id=ChIJp_AKSENFiEgRMRl3K--hzG8
+2025-11-21 08:56:19 [DEBUG] Fetching phone for place_id=ChIJp5PtEi56iEgRCorK5v0eH64
+2025-11-21 08:56:19 [DEBUG] Fetching phone for place_id=ChIJG_pHqqoRekgRZ1pn8LMnqi0
+2025-11-21 08:56:19 [DEBUG] Fetching phone for place_id=ChIJv7ahcYnXh0gRsVJgg3_W-A4
+2025-11-21 08:56:19 [DEBUG] Fetching phone for place_id=ChIJU0hdOsx5iEgR6utV9OitbDs
+2025-11-21 08:56:19 [DEBUG] Fetching phone for place_id=ChIJQXOhREwDekgRoDYx81LMpZA
+2025-11-21 08:56:19 [DEBUG] Fetching phone for place_id=ChIJP1Ytxi96iEgRrtVNPwx8Tx4
+2025-11-21 08:56:19 [DEBUG] Fetching phone for place_id=ChIJGfGdcctiiEgRMX4iY4FIFF0
+2025-11-21 08:56:19 [DEBUG] Fetching phone for place_id=ChIJTQNKTk5vhEgRNDFBYYxzrws
+2025-11-21 08:56:19 [DEBUG] Fetching phone for place_id=ChIJEyvt2sJCiEgRhMWseIKYEEY
+2025-11-21 08:56:19 [DEBUG] Fetching phone for place_id=ChIJExlGgzx6iEgRRUH0gLEYu48
+2025-11-21 08:56:19 [DEBUG] Got phone for ChIJExlGgzx6iEgRRUH0gLEYu48: 01324 624361
+2025-11-21 08:56:19 [DEBUG] Got phone for ChIJyZQAzZV5iEgRzqWySN_zzXI: 01324 623359
+2025-11-21 08:56:19 [DEBUG] Got phone for ChIJc_MoztlpiEgRjQhzj67FMHU: 0141 465 8800
+2025-11-21 08:56:19 [DEBUG] Got phone for ChIJv7ahcYnXh0gRsVJgg3_W-A4: 01506 844165
+2025-11-21 08:56:19 [DEBUG] Got phone for ChIJEyvt2sJCiEgRhMWseIKYEEY: 0141 775 2503
+2025-11-21 08:56:19 [DEBUG] Got phone for ChIJU0hdOsx5iEgR6utV9OitbDs: 01324 717262
+2025-11-21 08:56:19 [DEBUG] Got phone for ChIJTQNKTk5vhEgRNDFBYYxzrws: 01651 806212
+2025-11-21 08:56:19 [DEBUG] Got phone for ChIJQXOhREwDekgRoDYx81LMpZA: 01283 521800
+2025-11-21 08:56:19 [DEBUG] Got phone for ChIJGfGdcctiiEgRMX4iY4FIFF0: 01786 430387
+2025-11-21 08:56:19 [DEBUG] Got phone for ChIJp_AKSENFiEgRMRl3K--hzG8: 0141 942 7070
+2025-11-21 08:56:19 [DEBUG] Got phone for ChIJP1Ytxi96iEgRrtVNPwx8Tx4: 01324 619920
+2025-11-21 08:56:19 [DEBUG] Got phone for ChIJv5oPzPh4iEgRQfuWc63oqfY: 01324 472915
+2025-11-21 08:56:19 [DEBUG] Got phone for ChIJp5PtEi56iEgRCorK5v0eH64: 01324 623163
+2025-11-21 08:56:19 [DEBUG] Got phone for ChIJv5PQdMNHiEgR92OKFZ4ityU: 0141 620 2580
+2025-11-21 08:56:19 [DEBUG] Got phone for ChIJG_pHqqoRekgRZ1pn8LMnqi0: 01889 562164
+2025-11-21 08:56:19 [DEBUG] Phone enrichment completed for 15 places.
+2025-11-21 08:56:19 [INFO] Returning 20 vet results for query='Glentho'
+2025-11-21 08:56:20 [INFO] Vet search initiated for query='Glenthorn Uttoxeter', lat=None, lng=None, radius=15000
+2025-11-21 08:56:21 [DEBUG] Google Places returned 1 results for 'Glenthorn Uttoxeter'
+2025-11-21 08:56:21 [DEBUG] Fetching phone for place_id=ChIJG_pHqqoRekgRZ1pn8LMnqi0
+2025-11-21 08:56:21 [DEBUG] Got phone for ChIJG_pHqqoRekgRZ1pn8LMnqi0: 01889 562164
+2025-11-21 08:56:21 [DEBUG] Phone enrichment completed for 1 places.
+2025-11-21 08:56:21 [INFO] Returning 1 vet results for query='Glenthorn Uttoxeter'
+2025-11-21 08:56:23 [INFO] Saving vet for pet_id=80e09398-bfff-418f-8bd7-645aa6ac3e1a | place_id=ChIJG_pHqqoRekgRZ1pn8LMnqi0
+2025-11-21 08:56:23 [DEBUG] Vet payload: name=The Glenthorne Veterinary Group- Uttoxeter, phone=01889 562164, address=71 Derby Rd, Uttoxeter ST14 8EB
+2025-11-21 08:56:23 [INFO] Vet info saved successfully for pet_id=80e09398-bfff-418f-8bd7-645aa6ac3e1a

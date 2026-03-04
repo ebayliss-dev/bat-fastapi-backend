@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <title>{{ pet_name }} • Pet Report</title>
+    <style>
+        /* PDF-safe (no flex/grid/shadows) */
+        body {
+            margin: 0;
+            padding: 0;
+            color: #1f2a2e;
+            font-family: Helvetica, Arial, sans-serif;
+            background: #fff;
+        }
+
+        /* Rounded look everywhere */
+        .r12 {
+            border-radius: 12px;
+        }
+
+        .r16 {
+            border-radius: 16px;
+        }
+
+        .r18 {
+            border-radius: 18px;
+        }
+
+        .sheet {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        /* Header */
+        .header {
+            background: #f3fbf9;
+            border-bottom: 1px solid #e3f0ef;
+        }
+
+        .header td {
+            padding: 12px 14px;
+            vertical-align: middle;
+        }
+
+        .logo {
+            display: block;
+            width: 108px;
+            height: auto;
+            border: 1px solid #e3f0ef;
+            background: #fff;
+            border-radius: 18px;
+        }
+
+        .title {
+            font-size: 18pt;
+            margin: 0 0 4px 0;
+        }
+
+        /* slightly smaller main title */
+        .subtitle {
+            color: #6a7b80;
+            font-size: 10.5pt;
+            margin: 0;
+        }
+
+        /* Chips */
+        .chip {
+            display: inline-block;
+            padding: 6px 10px;
+            background: #e8f6f3;
+            color: #0b6f67;
+            border: 1px solid #dbecea;
+            border-radius: 999px;
+            font-size: 9pt;
+            margin-left: 6px;
+        }
+
+        /* Two-column body via small, splittable rows */
+        .body {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0 10px;
+        }
+
+        .body tr {
+            page-break-inside: auto;
+        }
+
+        .sidebar {
+            width: 32%;
+            background: #fafefe;
+            vertical-align: top;
+            padding: 12px 14px;
+            border: 1px solid #e3f0ef;
+            border-radius: 18px;
+        }
+
+        .content {
+            width: 68%;
+            vertical-align: top;
+            padding: 0;
+            border: 1px solid #e3f0ef;
+            background: #fff;
+            border-radius: 18px;
+        }
+
+        /* Section shell: small heading bar + big content */
+        .section {
+            padding: 12px 14px;
+        }
+
+        .sec-head {
+            margin: 0 0 6px 0;
+            font-size: 10.75pt;
+            /* smaller title */
+            color: #5a6a6f;
+            letter-spacing: .2px;
+        }
+
+        .pip {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            background: #F5B621;
+            border-radius: 6px;
+            margin-right: 8px;
+        }
+
+        /* KV blocks (sidebar) */
+        .side-block {
+            margin-bottom: 12px;
+        }
+
+        .side-h {
+            font-size: 10pt;
+            color: #6a7b80;
+            text-transform: uppercase;
+            margin: 0 0 8px 0;
+            letter-spacing: .3px;
+        }
+
+        .kv {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0 8px;
+        }
+
+        .kv .row>td {
+            padding: 0;
+        }
+
+        .kvbox {
+            border: 1px solid #e3f0ef;
+            background: #fff;
+            padding: 9px 10px;
+            border-radius: 16px;
+        }
+
+        .k {
+            color: #6a7b80;
+            font-size: 10pt;
+        }
+
+        .v {
+            color: #1f2a2e;
+            font-size: 10.75pt;
+        }
+
+        .avatar {
+            width: 100%;
+            height: auto;
+            border: 1px solid #e3f0ef;
+            border-radius: 18px;
+            display: block;
+            margin-bottom: 12px;
+            background: #fff;
+        }
+
+        /* Detail (body emphasis) */
+        .details {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 10px;
+        }
+
+        .details td {
+            vertical-align: top;
+            padding: 0;
+        }
+
+        .detail {
+            border: 1px solid #e3f0ef;
+            background: #fff;
+            /* white body */
+            padding: 14px;
+            /* roomier */
+            border-radius: 16px;
+            font-size: 12pt;
+            /* larger body */
+            line-height: 1.45;
+            page-break-inside: avoid;
+        }
+
+        .detail .dk {
+            display: block;
+            color: #6a7b80;
+            font-size: 10pt;
+            margin-bottom: 4px;
+        }
+
+        .detail .dv {
+            display: block;
+            font-weight: 600;
+            margin-top: 2px;
+            font-size: 12pt;
+        }
+
+        /* Overview key-value inline rows */
+        .inline {
+            display: block;
+        }
+
+        /* photos (full width row) */
+        .gallery-wrap {
+            border: 1px solid #e3f0ef;
+            background: #fff;
+            border-radius: 18px;
+            padding: 10px;
+        }
+
+        .photo-card {
+            border: 1px solid #e3f0ef;
+            background: #fff;
+            padding: 6px;
+            border-radius: 16px;
+            margin-bottom: 12px;
+            page-break-inside: avoid;
+        }
+
+        .photo {
+            width: 100%;
+            height: auto;
+            display: block;
+            border-radius: 12px;
+        }
+
+        .footer {
+            color: #6a7b80;
+            font-size: 9.5pt;
+            padding: 10px 14px;
+            border-top: 1px solid #e3f0ef;
+            margin-top: 8px;
+        }
+
+        @page {
+            margin: 16mm;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- HEADER -->
+    <table class="sheet header r18">
+        <tr>
+            <td style="width:130px;">
+                {% if business_logo %}
+                <img class="logo r18" src="{{ business_logo }}" alt="Business logo" />
+                {% endif %}
+            </td>
+            <td>
+                <div class="title">{{ pet_name }}’s Report</div>
+                <div class="subtitle">
+                    {% if breed %}{{ breed }}{% endif %}
+                    {% if report_date %}<span class="chip r18">Reported: {{ report_date }}</span>{% endif %}
+                </div>
+            </td>
+        </tr>
+    </table>
+
+    <!-- BODY -->
+    <table class="body">
+
+        <!-- Row 1: Avatar + Business | Overview -->
+        <tr>
+            <td class="sidebar r18">
+                {% if pet_avatar %}
+                <img class="avatar r18" src="{{ pet_avatar }}" alt="Pet photo" />
+                {% endif %}
+
+                <div class="side-block">
+                    <div class="side-h">Business</div>
+                    <table class="kv" width="100%">
+                        <tr class="row">
+                            <td>
+                                <div class="kvbox r18"><span class="k">Name</span><br /><span class="v">{{ business_name
+                                        }}</span></div>
+                            </td>
+                        </tr>
+                        {% if business_phone %}<tr class="row">
+                            <td>
+                                <div class="kvbox r18"><span class="k">Phone</span><br /><span class="v">{{
+                                        business_phone }}</span></div>
+                            </td>
+                        </tr>{% endif %}
+                        {% if business_email %}<tr class="row">
+                            <td>
+                                <div class="kvbox r18"><span class="k">Email</span><br /><span class="v">{{
+                                        business_email }}</span></div>
+                            </td>
+                        </tr>{% endif %}
+                    </table>
+                </div>
+            </td>
+
+            <td class="content r18">
+                <div class="section">
+                    <div class="sec-head"><span class="pip"></span>Overview</div>
+                    <table class="details">
+                        <tr>
+                            {% if report_date %}
+                            <td>
+                                <div class="detail r18">
+                                    <span class="dk">Report Date</span>
+                                    <span class="dv">{{ report_date }}</span>
+                                </div>
+                            </td>
+                            {% endif %}
+                            {% if mood %}
+                            <td>
+                                <div class="detail r18">
+                                    <span class="dk">Mood</span>
+                                    <span class="dv">{{ mood }}</span>
+                                </div>
+                            </td>
+                            {% endif %}
+                            {% if energy %}
+                            <td>
+                                <div class="detail r18">
+                                    <span class="dk">Energy</span>
+                                    <span class="dv">{{ energy }}</span>
+                                </div>
+                            </td>
+                            {% endif %}
+                        </tr>
+                        {% if is_on_lead %}
+                        <tr>
+                            <td colspan="3">
+                                <div class="detail r18">
+                                    <span class="dk">On Lead</span>
+                                    <span class="dv">{{ is_on_lead }}</span>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endif %}
+                    </table>
+                </div>
+            </td>
+        </tr>
+
+        <!-- Row 2: Client + Pet details | Introduction & Notes -->
+        <tr>
+            <td class="sidebar r18">
+                <div class="side-block">
+                    <div class="side-h">Client</div>
+                    <table class="kv" width="100%">
+                        <tr class="row">
+                            <td>
+                                <div class="kvbox r18"><span class="k">Name</span><br /><span class="v">{{ client_name
+                                        }}</span></div>
+                            </td>
+                        </tr>
+                        {% if client_address1 %}<tr class="row">
+                            <td>
+                                <div class="kvbox r18"><span class="k">Address</span><br /><span class="v">{{
+                                        client_address1 }}</span></div>
+                            </td>
+                        </tr>{% endif %}
+                        {% if client_postcode %}<tr class="row">
+                            <td>
+                                <div class="kvbox r18"><span class="k">Postcode</span><br /><span class="v">{{
+                                        client_postcode }}</span></div>
+                            </td>
+                        </tr>{% endif %}
+                    </table>
+                </div>
+
+                <div class="side-block">
+                    <div class="side-h">Pet Details</div>
+                    <table class="kv" width="100%">
+                        {% if breed %}<tr class="row">
+                            <td>
+                                <div class="kvbox r18"><span class="k">Breed</span><br /><span class="v">{{ breed
+                                        }}</span></div>
+                            </td>
+                        </tr>{% endif %}
+                    </table>
+                </div>
+            </td>
+
+            <td class="content r18">
+                <div class="section">
+                    {% if introduction %}
+                    <div class="sec-head"><span class="pip"></span>Introduction</div>
+                    <div class="detail r18" style="margin-bottom:12px;">
+                        <span class="dv" style="font-weight:normal;">{{ introduction }}</span>
+                    </div>
+                    {% endif %}
+
+                    {% if notes %}
+                    <div class="sec-head"><span class="pip"></span>Notes</div>
+                    <div class="detail r18">
+                        <span class="dv" style="font-weight:normal;">{{ notes }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </td>
+        </tr>
+
+        <!-- Row 3: Photos full-width -->
+        {% if images and images|length > 0 %}
+        <tr>
+            <td class="content r18" colspan="2">
+                <div class="section">
+                    <div class="sec-head"><span class="pip"></span>Photos</div>
+                    <div class="gallery-wrap r18">
+                        {% for img in images %}
+                        {% if img %}
+                        <div class="photo-card r18">
+                            <img class="photo r12" src="{{ img }}" alt="{{ pet_name }} photo {{ loop.index }}" />
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+            </td>
+        </tr>
+        {% endif %}
+
+    </table>
+
+    <!-- FOOTER -->
+    <div class="footer">
+        Generated for {{ client_name }}{% if report_date %} • {{ report_date }}{% endif %} — {{ business_name }}
+    </div>
+</body>
+
+</html>

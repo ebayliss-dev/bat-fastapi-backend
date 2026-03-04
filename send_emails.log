@@ -1,0 +1,28 @@
+2025-11-03 18:50:21,422 [INFO] Connecting to Redis at 10.0.0.1:6379...
+2025-11-03 18:50:21,423 [INFO] Connected to Redis successfully.
+2025-11-03 18:50:21,645 [INFO] 📧 Sending queued email to: gfhunwin@gmail.com (cc: None)
+2025-11-03 18:50:51,650 [ERROR] ❌ Failed to process queued email: [Errno 8] nodename nor servname provided, or not known
+Traceback (most recent call last):
+  File "/Users/edward.bayliss/Developer/Pawtul/pawtul-fastapi-backend/emergency.py", line 66, in <module>
+    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+         ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/smtplib.py", line 255, in __init__
+    (code, msg) = self.connect(host, port)
+                  ~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/smtplib.py", line 341, in connect
+    self.sock = self._get_socket(host, port, self.timeout)
+                ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/smtplib.py", line 312, in _get_socket
+    return socket.create_connection((host, port), timeout,
+           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+                                    self.source_address)
+                                    ^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/socket.py", line 840, in create_connection
+    for res in getaddrinfo(host, port, 0, SOCK_STREAM):
+               ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/socket.py", line 977, in getaddrinfo
+    for res in _socket.getaddrinfo(host, port, family, type, proto, flags):
+               ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+socket.gaierror: [Errno 8] nodename nor servname provided, or not known
+2025-11-03 18:50:51,849 [WARNING] Requeued email for retry due to error.
+2025-11-03 18:51:01,958 [INFO] 📧 Sending queued email to: charlotte2321@hotmail.com (cc: None)

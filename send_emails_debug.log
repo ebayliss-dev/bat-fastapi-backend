@@ -1,0 +1,227 @@
+2025-11-03 18:53:15,258 [DEBUG] ================================================================================
+2025-11-03 18:53:15,258 [DEBUG] DEBUGGING ENVIRONMENT INFO
+2025-11-03 18:53:15,258 [DEBUG] Python version: 3.13.7 (main, Aug 14 2025, 11:12:11) [Clang 17.0.0 (clang-1700.0.13.3)]
+2025-11-03 18:53:15,258 [DEBUG] Hostname: E1666889
+2025-11-03 18:53:20,261 [DEBUG] Could not resolve local IP: [Errno 8] nodename nor servname provided, or not known
+2025-11-03 18:53:20,261 [DEBUG] Redis host: 10.0.0.1:6379
+2025-11-03 18:53:20,261 [DEBUG] SMTP server: smtp.exchange2019.ionos.co.uk:587
+2025-11-03 18:53:20,261 [DEBUG] ================================================================================
+2025-11-03 18:53:20,261 [INFO] Connecting to Redis at 10.0.0.1:6379...
+2025-11-03 18:53:20,361 [INFO] ✅ Connected to Redis successfully.
+2025-11-03 18:53:20,361 [DEBUG] Waiting for next item in queue...
+2025-11-03 18:53:20,740 [DEBUG] Raw item length: 191066 bytes
+2025-11-03 18:53:20,741 [DEBUG] Decoded base64 length: 143298 bytes
+2025-11-03 18:53:20,741 [DEBUG] Unpickled message data keys: ['receiver', 'cc', 'subject', 'body', 'raw']
+2025-11-03 18:53:20,741 [DEBUG] Receiver: johnpardoe1984@outlook.com, CC: None, Raw len: 131464
+2025-11-03 18:53:20,745 [DEBUG] MIME message parsed successfully.
+2025-11-03 18:53:20,745 [DEBUG] Initial From: no-reply@pawtul.com
+2025-11-03 18:53:20,745 [DEBUG] Initial Subject: Jago has been checked out of a visit.
+2025-11-03 18:53:20,745 [DEBUG] Initial To: johnpardoe1984@outlook.com
+2025-11-03 18:53:20,745 [DEBUG] Initial CC: None
+2025-11-03 18:53:20,745 [DEBUG] From header already matches SMTP_USER.
+2025-11-03 18:53:20,745 [DEBUG] === FINAL HEADERS BEFORE SEND ===
+2025-11-03 18:53:20,745 [DEBUG] Content-Type: multipart/mixed; boundary="===============5744154174098560420=="
+2025-11-03 18:53:20,745 [DEBUG] MIME-Version: 1.0
+2025-11-03 18:53:20,745 [DEBUG] From: no-reply@pawtul.com
+2025-11-03 18:53:20,745 [DEBUG] To: johnpardoe1984@outlook.com
+2025-11-03 18:53:20,745 [DEBUG] Subject: Jago has been checked out of a visit.
+2025-11-03 18:53:20,745 [DEBUG] === END HEADERS ===
+2025-11-03 18:53:20,745 [DEBUG] Recipient list prepared: ['johnpardoe1984@outlook.com']
+2025-11-03 18:53:20,745 [INFO] 📧 Connecting to SMTP server for ['johnpardoe1984@outlook.com']
+2025-11-03 18:53:50,749 [ERROR] ❌ SMTP error: [Errno 8] nodename nor servname provided, or not known
+2025-11-03 18:53:50,750 [DEBUG] SMTP send attempt duration: 30.0s
+2025-11-03 18:53:50,750 [ERROR] ❌ Exception during email processing:
+2025-11-03 18:53:50,759 [ERROR] Traceback (most recent call last):
+  File "/Users/edward.bayliss/Developer/Pawtul/pawtul-fastapi-backend/emergency.py", line 131, in <module>
+    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=30) as server:
+         ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/smtplib.py", line 255, in __init__
+    (code, msg) = self.connect(host, port)
+                  ~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/smtplib.py", line 341, in connect
+    self.sock = self._get_socket(host, port, self.timeout)
+                ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/smtplib.py", line 312, in _get_socket
+    return socket.create_connection((host, port), timeout,
+           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+                                    self.source_address)
+                                    ^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/socket.py", line 840, in create_connection
+    for res in getaddrinfo(host, port, 0, SOCK_STREAM):
+               ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/socket.py", line 977, in getaddrinfo
+    for res in _socket.getaddrinfo(host, port, family, type, proto, flags):
+               ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+socket.gaierror: [Errno 8] nodename nor servname provided, or not known
+
+2025-11-03 18:53:50,896 [WARNING] Requeued email for retry due to error.
+2025-11-03 18:53:50,896 [DEBUG] Sleeping 10s before retry.
+2025-11-03 18:54:00,898 [DEBUG] Waiting for next item in queue...
+2025-11-03 18:54:01,070 [DEBUG] Raw item length: 195630 bytes
+2025-11-03 18:54:01,071 [DEBUG] Decoded base64 length: 146720 bytes
+2025-11-03 18:54:01,071 [DEBUG] Unpickled message data keys: ['receiver', 'cc', 'subject', 'body', 'raw']
+2025-11-03 18:54:01,071 [DEBUG] Receiver: katieandben10@outlook.com, CC: None, Raw len: 133244
+2025-11-03 18:54:01,075 [DEBUG] MIME message parsed successfully.
+2025-11-03 18:54:01,075 [DEBUG] Initial From: no-reply@pawtul.com
+2025-11-03 18:54:01,075 [DEBUG] Initial Subject: Invoice from Worcester Woofers B&B.
+2025-11-03 18:54:01,075 [DEBUG] Initial To: katieandben10@outlook.com
+2025-11-03 18:54:01,075 [DEBUG] Initial CC: None
+2025-11-03 18:54:01,075 [DEBUG] From header already matches SMTP_USER.
+2025-11-03 18:54:01,075 [DEBUG] === FINAL HEADERS BEFORE SEND ===
+2025-11-03 18:54:01,075 [DEBUG] Content-Type: multipart/mixed; boundary="===============6716123628973571989=="
+2025-11-03 18:54:01,075 [DEBUG] MIME-Version: 1.0
+2025-11-03 18:54:01,076 [DEBUG] From: no-reply@pawtul.com
+2025-11-03 18:54:01,076 [DEBUG] To: katieandben10@outlook.com
+2025-11-03 18:54:01,076 [DEBUG] Subject: Invoice from Worcester Woofers B&B.
+2025-11-03 18:54:01,076 [DEBUG] === END HEADERS ===
+2025-11-03 18:54:01,076 [DEBUG] Recipient list prepared: ['katieandben10@outlook.com']
+2025-11-03 18:54:01,076 [INFO] 📧 Connecting to SMTP server for ['katieandben10@outlook.com']
+2025-11-03 18:54:31,081 [ERROR] ❌ SMTP error: [Errno 8] nodename nor servname provided, or not known
+2025-11-03 18:54:31,082 [DEBUG] SMTP send attempt duration: 30.01s
+2025-11-03 18:54:31,082 [ERROR] ❌ Exception during email processing:
+2025-11-03 18:54:31,085 [ERROR] Traceback (most recent call last):
+  File "/Users/edward.bayliss/Developer/Pawtul/pawtul-fastapi-backend/emergency.py", line 131, in <module>
+    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=30) as server:
+         ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/smtplib.py", line 255, in __init__
+    (code, msg) = self.connect(host, port)
+                  ~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/smtplib.py", line 341, in connect
+    self.sock = self._get_socket(host, port, self.timeout)
+                ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/smtplib.py", line 312, in _get_socket
+    return socket.create_connection((host, port), timeout,
+           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+                                    self.source_address)
+                                    ^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/socket.py", line 840, in create_connection
+    for res in getaddrinfo(host, port, 0, SOCK_STREAM):
+               ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/socket.py", line 977, in getaddrinfo
+    for res in _socket.getaddrinfo(host, port, family, type, proto, flags):
+               ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+socket.gaierror: [Errno 8] nodename nor servname provided, or not known
+
+2025-11-03 18:54:31,172 [WARNING] Requeued email for retry due to error.
+2025-11-03 18:54:31,172 [DEBUG] Sleeping 10s before retry.
+2025-11-03 18:54:41,176 [DEBUG] Waiting for next item in queue...
+2025-11-03 18:54:41,600 [DEBUG] Raw item length: 191102 bytes
+2025-11-03 18:54:41,600 [DEBUG] Decoded base64 length: 143324 bytes
+2025-11-03 18:54:41,600 [DEBUG] Unpickled message data keys: ['receiver', 'cc', 'subject', 'body', 'raw']
+2025-11-03 18:54:41,600 [DEBUG] Receiver: gfhunwin@gmail.com, CC: None, Raw len: 131477
+2025-11-03 18:54:41,604 [DEBUG] MIME message parsed successfully.
+2025-11-03 18:54:41,604 [DEBUG] Initial From: no-reply@pawtul.com
+2025-11-03 18:54:41,604 [DEBUG] Initial Subject: Lilo Daisy has been checked out of a visit.
+2025-11-03 18:54:41,604 [DEBUG] Initial To: gfhunwin@gmail.com
+2025-11-03 18:54:41,604 [DEBUG] Initial CC: None
+2025-11-03 18:54:41,604 [DEBUG] From header already matches SMTP_USER.
+2025-11-03 18:54:41,604 [DEBUG] === FINAL HEADERS BEFORE SEND ===
+2025-11-03 18:54:41,604 [DEBUG] Content-Type: multipart/mixed; boundary="===============4979633377107674688=="
+2025-11-03 18:54:41,604 [DEBUG] MIME-Version: 1.0
+2025-11-03 18:54:41,604 [DEBUG] From: no-reply@pawtul.com
+2025-11-03 18:54:41,604 [DEBUG] To: gfhunwin@gmail.com
+2025-11-03 18:54:41,604 [DEBUG] Subject: Lilo Daisy has been checked out of a visit.
+2025-11-03 18:54:41,604 [DEBUG] === END HEADERS ===
+2025-11-03 18:54:41,604 [DEBUG] Recipient list prepared: ['gfhunwin@gmail.com']
+2025-11-03 18:54:41,604 [INFO] 📧 Connecting to SMTP server for ['gfhunwin@gmail.com']
+2025-11-03 18:55:11,621 [ERROR] ❌ SMTP error: [Errno 8] nodename nor servname provided, or not known
+2025-11-03 18:55:11,622 [DEBUG] SMTP send attempt duration: 30.02s
+2025-11-03 18:55:11,622 [ERROR] ❌ Exception during email processing:
+2025-11-03 18:55:11,625 [ERROR] Traceback (most recent call last):
+  File "/Users/edward.bayliss/Developer/Pawtul/pawtul-fastapi-backend/emergency.py", line 131, in <module>
+    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=30) as server:
+         ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/smtplib.py", line 255, in __init__
+    (code, msg) = self.connect(host, port)
+                  ~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/smtplib.py", line 341, in connect
+    self.sock = self._get_socket(host, port, self.timeout)
+                ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/smtplib.py", line 312, in _get_socket
+    return socket.create_connection((host, port), timeout,
+           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+                                    self.source_address)
+                                    ^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/socket.py", line 840, in create_connection
+    for res in getaddrinfo(host, port, 0, SOCK_STREAM):
+               ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/socket.py", line 977, in getaddrinfo
+    for res in _socket.getaddrinfo(host, port, family, type, proto, flags):
+               ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+socket.gaierror: [Errno 8] nodename nor servname provided, or not known
+
+2025-11-03 18:55:11,667 [WARNING] Requeued email for retry due to error.
+2025-11-03 18:55:11,668 [DEBUG] Sleeping 10s before retry.
+2025-11-03 18:55:12,994 [DEBUG] ================================================================================
+2025-11-03 18:55:12,994 [DEBUG] DEBUGGING ENVIRONMENT INFO
+2025-11-03 18:55:12,994 [DEBUG] Python version: 3.13.7 (main, Aug 14 2025, 11:12:11) [Clang 17.0.0 (clang-1700.0.13.3)]
+2025-11-03 18:55:12,994 [DEBUG] Hostname: E1666889
+2025-11-03 18:55:18,000 [DEBUG] Could not resolve local IP: [Errno 8] nodename nor servname provided, or not known
+2025-11-03 18:55:18,000 [DEBUG] Redis host: 10.0.0.1:6379
+2025-11-03 18:55:18,000 [DEBUG] SMTP server: smtp.exchange2019.ionos.co.uk:587
+2025-11-03 18:55:18,001 [DEBUG] ================================================================================
+2025-11-03 18:55:18,001 [INFO] Connecting to Redis at 10.0.0.1:6379...
+2025-11-03 18:55:18,105 [INFO] ✅ Connected to Redis successfully.
+2025-11-03 18:55:18,105 [DEBUG] Waiting for next item in queue...
+2025-11-03 18:55:18,464 [DEBUG] Raw item length: 191086 bytes
+2025-11-03 18:55:18,465 [DEBUG] Decoded base64 length: 143312 bytes
+2025-11-03 18:55:18,465 [DEBUG] Unpickled message data keys: ['receiver', 'cc', 'subject', 'body', 'raw']
+2025-11-03 18:55:18,465 [DEBUG] Receiver: andreaharris1962@yahoo.co.uk, CC: None, Raw len: 131471
+2025-11-03 18:55:18,468 [DEBUG] MIME message parsed successfully.
+2025-11-03 18:55:18,468 [DEBUG] Initial From: no-reply@pawtul.com
+2025-11-03 18:55:18,468 [DEBUG] Initial Subject: Penny has been checked out of a visit.
+2025-11-03 18:55:18,468 [DEBUG] Initial To: andreaharris1962@yahoo.co.uk
+2025-11-03 18:55:18,468 [DEBUG] Initial CC: None
+2025-11-03 18:55:18,468 [DEBUG] From header already matches SMTP_USER.
+2025-11-03 18:55:18,468 [DEBUG] === FINAL HEADERS BEFORE SEND ===
+2025-11-03 18:55:18,468 [DEBUG] Content-Type: multipart/mixed; boundary="===============1287195246545505074=="
+2025-11-03 18:55:18,468 [DEBUG] MIME-Version: 1.0
+2025-11-03 18:55:18,468 [DEBUG] From: no-reply@pawtul.com
+2025-11-03 18:55:18,468 [DEBUG] To: andreaharris1962@yahoo.co.uk
+2025-11-03 18:55:18,468 [DEBUG] Subject: Penny has been checked out of a visit.
+2025-11-03 18:55:18,468 [DEBUG] === END HEADERS ===
+2025-11-03 18:55:18,468 [DEBUG] Recipient list prepared: ['andreaharris1962@yahoo.co.uk']
+2025-11-03 18:55:18,468 [INFO] 📧 Connecting to SMTP server for ['andreaharris1962@yahoo.co.uk']
+2025-11-03 18:55:21,669 [DEBUG] Waiting for next item in queue...
+2025-11-03 18:55:21,754 [DEBUG] Raw item length: 68798 bytes
+2025-11-03 18:55:21,755 [DEBUG] Decoded base64 length: 51596 bytes
+2025-11-03 18:55:21,755 [DEBUG] Unpickled message data keys: ['receiver', 'cc', 'subject', 'body', 'raw']
+2025-11-03 18:55:21,755 [DEBUG] Receiver: charlotte2321@hotmail.com, CC: None, Raw len: 37960
+2025-11-03 18:55:21,757 [DEBUG] MIME message parsed successfully.
+2025-11-03 18:55:21,757 [DEBUG] Initial From: no-reply@pawtul.com
+2025-11-03 18:55:21,757 [DEBUG] Initial Subject: Hello, from Doggo House Daycare
+2025-11-03 18:55:21,757 [DEBUG] Initial To: charlotte2321@hotmail.com
+2025-11-03 18:55:21,757 [DEBUG] Initial CC: None
+2025-11-03 18:55:21,757 [DEBUG] From header already matches SMTP_USER.
+2025-11-03 18:55:21,757 [DEBUG] === FINAL HEADERS BEFORE SEND ===
+2025-11-03 18:55:21,757 [DEBUG] Content-Type: multipart/mixed; boundary="===============4116183828619629054=="
+2025-11-03 18:55:21,757 [DEBUG] MIME-Version: 1.0
+2025-11-03 18:55:21,757 [DEBUG] From: no-reply@pawtul.com
+2025-11-03 18:55:21,757 [DEBUG] To: charlotte2321@hotmail.com
+2025-11-03 18:55:21,757 [DEBUG] Subject: Hello, from Doggo House Daycare
+2025-11-03 18:55:21,757 [DEBUG] === END HEADERS ===
+2025-11-03 18:55:21,757 [DEBUG] Recipient list prepared: ['charlotte2321@hotmail.com']
+2025-11-03 18:55:21,757 [INFO] 📧 Connecting to SMTP server for ['charlotte2321@hotmail.com']
+2025-11-03 18:55:37,915 [DEBUG] Connected to SMTP socket.
+2025-11-03 18:55:37,915 [DEBUG] Starting TLS...
+2025-11-03 18:55:38,098 [DEBUG] STARTTLS response: 220 b'2.0.0 SMTP server ready'
+2025-11-03 18:55:38,098 [DEBUG] Logging in as no-reply@pawtul.com
+2025-11-03 18:55:38,376 [DEBUG] LOGIN response: 235 b'2.7.0 Authentication successful'
+2025-11-03 18:55:38,377 [DEBUG] Sending message...
+2025-11-03 18:55:39,023 [ERROR] SMTP send_message() failed: (550, b'5.7.60 SMTP; Client does not have permissions to send as this sender')
+2025-11-03 18:55:39,061 [ERROR] ❌ SMTP error: (550, b'5.7.60 SMTP; Client does not have permissions to send as this sender')
+2025-11-03 18:55:39,061 [DEBUG] SMTP send attempt duration: 20.59s
+2025-11-03 18:55:39,061 [ERROR] ❌ Exception during email processing:
+2025-11-03 18:55:39,063 [ERROR] Traceback (most recent call last):
+  File "/Users/edward.bayliss/Developer/Pawtul/pawtul-fastapi-backend/emergency.py", line 144, in <module>
+    server.send_message(mime_msg, to_addrs=recipients)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/smtplib.py", line 975, in send_message
+    return self.sendmail(from_addr, to_addrs, flatmsg, mail_options,
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                         rcpt_options)
+                         ^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/smtplib.py", line 897, in sendmail
+    raise SMTPDataError(code, resp)
+smtplib.SMTPDataError: (550, b'5.7.60 SMTP; Client does not have permissions to send as this sender')
+
