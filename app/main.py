@@ -15,7 +15,7 @@ from app.models.user import User
 from uuid import UUID
 from app.__version__ import __version__
 
-from app.routes import auth, beers, dashboard, pubs
+from app.routes import account, auth, beers, dashboard, pubs
 from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -114,6 +114,9 @@ app.include_router(
 app.include_router(pubs.router, prefix=f"/api/{__version__}/pubs", tags=["pubs"])
 
 app.include_router(beers.router, prefix=f"/api/{__version__}/beers", tags=["beers"])
+
+app.include_router(account.router, prefix=f"/api/{__version__}/account", tags=["account"])
+
 
 
 app.add_middleware(

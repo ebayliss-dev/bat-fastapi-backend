@@ -63,7 +63,7 @@ limiter = Limiter(key_func=get_remote_address)
 
 
 
-@router.post("/sync")
+@router.get("/sync")
 async def sync_beers(db: Session = Depends(get_db)):
 
     # 1. Load all pubs + tokens
@@ -75,6 +75,7 @@ async def sync_beers(db: Session = Depends(get_db)):
 
     token_string = ",".join(token_map.keys())
     url = f"https://www.realalefinder.com/beerboard/aggregate.php?tokens={token_string}"
+    print(url)
 
     # 2. Fetch data
     try:
@@ -274,7 +275,25 @@ async def get_beer_by_id(payload: dict, db: Session = Depends(get_db)):
     base.setdefault("new", False)
     base.setdefault("archived", False)
 
-    # 2) Fetch all matching beers with the same product+brewery
+    # 2) Fetch vote stats for this beer
+    vote_stats = db.execute(
+        text("""
+            SELECT 
+                COUNT(*) AS vote_count,
+                COALESCE(AVG(rating), 0) AS average_rating
+            FROM public.beervotes
+            WHERE beer_id = :beer_id
+        """),
+        {"beer_id": beer_id}
+    ).mappings().first()
+
+    vote_count = int(vote_stats["vote_count"] or 0)
+    average_rating = float(vote_stats["average_rating"] or 0)
+
+    # Optional: round average rating to 1 decimal place
+    average_rating = round(average_rating, 1)
+
+    # 3) Fetch all matching beers with the same product+brewery
     beers = db.execute(
         text("""
             SELECT 
@@ -291,15 +310,15 @@ async def get_beer_by_id(payload: dict, db: Session = Depends(get_db)):
         {"product": base["productname"], "brewery": base["brewery"]}
     ).mappings().all()
 
-    # 3) Split into serving vs sold-out
+    # 4) Split into serving vs sold-out
     pubs_serving = []
     pubs_sold_out = []
 
     for b in beers:
         entry = {
-            "pub_id":  b["pub_id"],
+            "pub_id": b["pub_id"],
             "pub_name": b["pub_name"],
-            "status":  b["status"],    # 👈 IMPORTANT: per-pub status
+            "status": b["status"],
         }
 
         if b["sold_out"]:
@@ -312,6 +331,8 @@ async def get_beer_by_id(payload: dict, db: Session = Depends(get_db)):
         "pubs_serving": pubs_serving,
         "pubs_sold_out": pubs_sold_out,
         "locations": len(pubs_serving),
+        "vote_count": vote_count,
+        "average_rating": average_rating,
     }
 
 
@@ -456,6 +477,7 @@ async def rate_beer_by_id(
             "rating": payload.rating,
         })
 
+
         # 🔥 Log rating with user_id
         db.execute(text("""
             INSERT INTO public.logs (uuid, body, added, image, user_id)
@@ -464,6 +486,15 @@ async def rate_beer_by_id(
             "id": str(uuid.uuid4()),
             "body": f"{user.user_name} rated {beer.productname} at {pub.name} {rating_str}",
             "image": image_bytes,
+            "user_id": str(user.id)
+        })
+
+        # ✅ Give user 100 credits for first vote
+        db.execute(text("""
+            UPDATE public.accounts
+            SET credits = COALESCE(credits, 0) + 100
+            WHERE id = :user_id
+        """), {
             "user_id": str(user.id)
         })
 

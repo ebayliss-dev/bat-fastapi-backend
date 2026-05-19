@@ -12,7 +12,7 @@ from werkzeug.security import check_password_hash
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import Boolean, Column, DateTime, String, text
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, text
 from sqlalchemy.orm import Session
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -336,52 +336,138 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 class MagicLogin(Base):
     __tablename__ = "magic_logins"
 
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    mobile = Column(String, index=True)
-    token = Column(String, unique=True)
-    expires_at = Column(DateTime)
-    used = Column(Boolean, default=False)
+    id = Column(Integer, primary_key=True, index=True)
+
+    mobile = Column(String, index=True, nullable=False)
+
+    # The real login token used by the magic link
+    token = Column(String, unique=True, index=True, nullable=False)
+
+    # Store the full magic link if you want it in DB
+    magic_link = Column(String, nullable=False)
+
+    # Store OTP hashed, not plain text
+    otp_hash = Column(String, nullable=False)
+    used = Column(Boolean, nullable=True)
+    expires_at = Column(DateTime, nullable=False)
+    used_at = Column(DateTime, nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     
+
+import os
+import secrets
+import hashlib
+from datetime import datetime, timedelta
+from fastapi import HTTPException
+
+
+def normalise_uk_mobile(mobile: str) -> str:
+    if not mobile:
+        raise HTTPException(status_code=400, detail="Mobile number required")
+
+    mobile = mobile.replace(" ", "").replace("-", "")
+
+    if mobile.startswith("+44"):
+        mobile = "44" + mobile[3:]
+
+    elif mobile.startswith("0044"):
+        mobile = "44" + mobile[4:]
+
+    elif mobile.startswith("07"):
+        mobile = "44" + mobile[1:]
+
+    elif not mobile.startswith("44"):
+        raise HTTPException(status_code=400, detail="Invalid UK mobile number")
+
+    return mobile
+
+
+def generate_otp() -> str:
+    return str(secrets.randbelow(900000) + 100000)
+
+
+def hash_otp(otp: str) -> str:
+    return hashlib.sha256(otp.encode("utf-8")).hexdigest()
+
 @router.post("/magic-link")
 async def request_magic_link(payload: dict, db: Session = Depends(get_db)):
 
     mobile = payload.get("mobile")
     login_type = payload.get("loginType")
 
-    if not mobile:
-        raise HTTPException(status_code=400, detail="Mobile number required")
+    mobile = normalise_uk_mobile(mobile)
 
-    # Optional: basic UK formatting
-    mobile = mobile.replace(" ", "")
-
-    if mobile.startswith("07"):
-        mobile = "44" + mobile[1:]
-
+    # Real magic login token
     token = create_magic_token(mobile)
+
+    base_url = os.getenv("MAGIC_LINK_BASE", "https://burtonaletrail.com/magic")
+    magic_link = f"{base_url}?token={token}"
+
+    # OTP sent by SMS
+    otp = generate_otp()
 
     db_token = MagicLogin(
         mobile=mobile,
         token=token,
+        magic_link=magic_link,
+        otp_hash=hash_otp(otp),
         expires_at=datetime.utcnow() + timedelta(minutes=15),
     )
 
     db.add(db_token)
     db.commit()
 
-    base_url = os.getenv("MAGIC_LINK_BASE", "https://burtonaletrail.com/magic")
-
-    link = f"{base_url}?token={token}"
+    sms_message = (
+        f"Burton Ale Trail sign-in code: {otp}\n\n"
+        "This code expires in 15 minutes. Do not share it."
+    )
 
     try:
-        send_magic_link_sms(mobile, link)
+        send_magic_link_sms(mobile, sms_message)
     except Exception as e:
         print(e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Could not send login code")
 
-    return {"message": "Magic link sent successfully"}
+    return {
+        "message": "Login code sent successfully"
+    }
 
+@router.post("/verify-otp")
+async def verify_otp(payload: dict, db: Session = Depends(get_db)):
 
+    mobile = payload.get("mobile")
+    otp = payload.get("otp")
+
+    mobile = normalise_uk_mobile(mobile)
+
+    if not otp:
+        raise HTTPException(status_code=400, detail="OTP required")
+
+    otp = str(otp).strip()
+
+    db_token = (
+        db.query(MagicLogin)
+        .filter(
+            MagicLogin.mobile == mobile,
+            MagicLogin.otp_hash == hash_otp(otp),
+            MagicLogin.expires_at > datetime.utcnow(),
+            MagicLogin.used_at.is_(None),
+        )
+        .order_by(MagicLogin.created_at.desc())
+        .first()
+    )
+
+    if not db_token:
+        raise HTTPException(status_code=401, detail="Invalid or expired code")
+
+    db_token.used_at = datetime.utcnow()
+    db.commit()
+
+    return {
+        "message": "OTP verified successfully",
+        "magic_link": db_token.magic_link
+    }
 
 @router.get("/magic-login")
 async def magic_login(token: str, db: Session = Depends(get_db)):
