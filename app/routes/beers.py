@@ -13,7 +13,7 @@ from werkzeug.security import check_password_hash
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr, Field, RootModel
-from sqlalchemy import and_, text
+from sqlalchemy import and_, or_, text
 from sqlalchemy.orm import Session
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -92,27 +92,60 @@ async def sync_beers(db: Session = Depends(get_db)):
 
     imported_count = 0
     updated_count = 0
+    deleted_cider_count = 0
     seen = set()
 
-    # 3. Loop through pubs
+    # 3. Delete any existing ciders already in the DB
+    existing_ciders = (
+        db.query(Beer)
+        .filter(
+            or_(
+                Beer.ctype.ilike("cider"),
+                Beer.productname.ilike("%cider%")
+            )
+        )
+        .all()
+    )
+
+    for cider in existing_ciders:
+        db.delete(cider)
+        deleted_cider_count += 1
+
+    db.flush()
+
+    # 4. Loop through pubs
     for pub_entry in payload["pubs"]:
-        token = pub_entry["token"]
+        token = pub_entry.get("token")
         pub_id = token_map.get(token)
+
         if not pub_id:
             continue
 
-        beers = pub_entry["data"].get("beerlist", [])
+        beers = pub_entry.get("data", {}).get("beerlist", [])
 
         for b in beers:
 
-            # UNIQUE MATCHING RULE (no duplicates)
+            ctype_check = (b.get("ctype") or "").strip().lower()
+            productname_check = (b.get("productname") or "").strip().lower()
+
+            # Skip ciders completely
+            if ctype_check == "cider" or "cider" in productname_check:
+                continue
+
+            productname = b.get("productname")
+            brewery = b.get("brewery")
+
+            if not productname or not brewery:
+                continue
+
+            # UNIQUE MATCHING RULE - no duplicates
             existing = (
                 db.query(Beer)
                 .filter(
                     and_(
                         Beer.pub_id == pub_id,
-                        Beer.productname == b["productname"],
-                        Beer.brewery == b["brewery"]
+                        Beer.productname == productname,
+                        Beer.brewery == brewery
                     )
                 )
                 .first()
@@ -149,8 +182,8 @@ async def sync_beers(db: Session = Depends(get_db)):
                     pub_id=pub_id,
                     pumpclip=b.get("pumpclip"),
                     pngpclip=b.get("pngpclip"),
-                    brewery=b.get("brewery"),
-                    productname=b.get("productname"),
+                    brewery=brewery,
+                    productname=productname,
                     abv=b.get("abv"),
                     tastingnotes=b.get("tastingnotes"),
                     price=b.get("price"),
@@ -174,8 +207,9 @@ async def sync_beers(db: Session = Depends(get_db)):
 
                 imported_count += 1
 
-    # 4. Set beers missing from API as sold out
+    # 5. Set beers missing from API as sold out
     all_beers = db.query(Beer).all()
+
     for beer in all_beers:
         if beer.id not in seen:
             beer.sold_out = True
@@ -183,15 +217,15 @@ async def sync_beers(db: Session = Depends(get_db)):
 
     db.commit()
 
-    # 5. Return summary
+    # 6. Return summary
     return {
         "status": "success",
         "pubs_processed": len(token_map),
         "imported": imported_count,
         "updated": updated_count,
-        "total_changed": imported_count + updated_count,
+        "deleted_ciders": deleted_cider_count,
+        "total_changed": imported_count + updated_count + deleted_cider_count,
     }
-
 
 
 class BeerOut(RootModel[list[Dict[str, Any]]]):
