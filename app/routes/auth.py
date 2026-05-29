@@ -19,7 +19,7 @@ from slowapi.util import get_remote_address
 from jose import JWTError, jwt
 
 from app import crud
-from app.models.user import Base
+from app.models.user import Base, User
 from app.schemas.login import LoginRequest
 from app.schemas.token import PasswordSubmitRequest, RefreshTokenRequest, Token
 from app.utils.magic import create_magic_token, verify_magic_token
