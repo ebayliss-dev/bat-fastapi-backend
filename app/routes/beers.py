@@ -1,5 +1,6 @@
 import base64
 from datetime import timedelta
+from decimal import Decimal
 import hashlib
 from typing import Any, Dict, List, Optional
 import uuid
@@ -231,48 +232,247 @@ async def sync_beers(db: Session = Depends(get_db)):
 class BeerOut(RootModel[list[Dict[str, Any]]]):
     pass
 
+from decimal import Decimal
+from fastapi import Depends
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+
+def ordinal_label(n: int) -> str:
+    if 10 <= n % 100 <= 20:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+
+    return f"{n}{suffix} Place"
+
 
 @router.post("/all")
 async def get_all_beers(db: Session = Depends(get_db)):
+    """
+    Returns one row per real beer, not one row per pub beer instance.
+
+    A beer is treated as the same beer when:
+      - brewery matches case-insensitively
+      - productname matches case-insensitively
+      - abv matches
+
+    Votes are calculated at canonical beer level, not pub level.
+
+    Ranking:
+      - one latest vote per user per real beer
+      - Bayesian weighted score for fairness
+      - beers with no votes get score 0
+      - backend returns rank and rank_label
+    """
+
     query = text("""
-        SELECT 
-            b.id,
-            b.productname,
-            b.brewery,
-            b.abv,
-            b.tag,
-            b.style,
-            b.stylecode,
-            b.colorfrom,
-            b.colorto,
-            b.shortstyledesc,
-            b.tastingnotes,
-            b.price,
-            b.ctype,
-            b.allergens,
-            b.allergens_text,
-            b.status,
-            b.pngpclip,
+        WITH beer_instances AS (
+            SELECT
+                b.*,
 
-            ARRAY_AGG(DISTINCT p.name) AS pubs_serving,
-            ARRAY_AGG(DISTINCT p.id::text) AS pub_ids,
-            COUNT(DISTINCT p.id) AS locations
+                md5(
+                    lower(trim(coalesce(b.brewery, ''))) || '|' ||
+                    lower(trim(coalesce(b.productname, ''))) || '|' ||
+                    coalesce(b.abv::text, '')
+                ) AS beer_key
 
-        FROM public.beers b
-        JOIN public.pubs p ON p.id = b.pub_id
-        WHERE b.sold_out = FALSE
-        GROUP BY b.id                 -- 🔥 THIS FIXES DUPLICATES
-        ORDER BY locations DESC, productname ASC
+            FROM public.beers b
+            WHERE b.sold_out = FALSE
+        ),
+
+        beer_groups AS (
+            SELECT
+                bi.beer_key,
+
+                -- Representative ID for frontend navigation
+                (ARRAY_AGG(bi.id ORDER BY bi.created_at DESC))[1] AS id,
+
+                (ARRAY_AGG(bi.productname ORDER BY bi.created_at DESC))[1] AS productname,
+                (ARRAY_AGG(bi.brewery ORDER BY bi.created_at DESC))[1] AS brewery,
+                (ARRAY_AGG(bi.abv ORDER BY bi.created_at DESC))[1] AS abv,
+
+                (ARRAY_AGG(bi.tag ORDER BY bi.created_at DESC))[1] AS tag,
+                (ARRAY_AGG(bi.style ORDER BY bi.created_at DESC))[1] AS style,
+                (ARRAY_AGG(bi.stylecode ORDER BY bi.created_at DESC))[1] AS stylecode,
+                (ARRAY_AGG(bi.colorfrom ORDER BY bi.created_at DESC))[1] AS colorfrom,
+                (ARRAY_AGG(bi.colorto ORDER BY bi.created_at DESC))[1] AS colorto,
+                (ARRAY_AGG(bi.shortstyledesc ORDER BY bi.created_at DESC))[1] AS shortstyledesc,
+                (ARRAY_AGG(bi.tastingnotes ORDER BY bi.created_at DESC))[1] AS tastingnotes,
+                (ARRAY_AGG(bi.price ORDER BY bi.created_at DESC))[1] AS price,
+                (ARRAY_AGG(bi.ctype ORDER BY bi.created_at DESC))[1] AS ctype,
+                (ARRAY_AGG(bi.allergens ORDER BY bi.created_at DESC))[1] AS allergens,
+                (ARRAY_AGG(bi.allergens_text ORDER BY bi.created_at DESC))[1] AS allergens_text,
+                (ARRAY_AGG(bi.status ORDER BY bi.created_at DESC))[1] AS status,
+                (ARRAY_AGG(bi.pngpclip ORDER BY bi.created_at DESC))[1] AS pngpclip,
+
+                bool_or(bi.new) AS new,
+
+                ARRAY_AGG(DISTINCT p.name ORDER BY p.name) AS pubs_serving,
+                ARRAY_AGG(DISTINCT p.id::text ORDER BY p.id::text) AS pub_ids,
+                ARRAY_AGG(DISTINCT bi.id::text ORDER BY bi.id::text) AS beer_instance_ids,
+
+                COUNT(DISTINCT p.id) AS locations
+
+            FROM beer_instances bi
+            JOIN public.pubs p ON p.id = bi.pub_id
+            GROUP BY bi.beer_key
+        ),
+
+        raw_votes AS (
+            SELECT
+                bi.beer_key,
+                v.id AS vote_id,
+                v.user_id,
+                v.rating,
+                v.review,
+                v.created_at,
+                v.updated_at,
+
+                ROW_NUMBER() OVER (
+                    PARTITION BY bi.beer_key, v.user_id
+                    ORDER BY coalesce(v.updated_at, v.created_at) DESC
+                ) AS rn
+
+            FROM public.beervotes v
+            JOIN beer_instances bi ON bi.id = v.beer_id
+            WHERE v.rating IS NOT NULL
+        ),
+
+        deduped_votes AS (
+            SELECT
+                beer_key,
+                user_id,
+                rating,
+                review,
+                created_at,
+                updated_at
+            FROM raw_votes
+            WHERE rn = 1
+        ),
+
+        global_stats AS (
+            SELECT
+                COALESCE(AVG(rating), 0) AS global_avg
+            FROM deduped_votes
+        ),
+
+        vote_stats AS (
+            SELECT
+                beer_key,
+                COUNT(*) AS vote_count,
+                ROUND(AVG(rating)::numeric, 2) AS avg_rating,
+                MIN(rating) AS min_rating,
+                MAX(rating) AS max_rating
+            FROM deduped_votes
+            GROUP BY beer_key
+        ),
+
+        scored_beers AS (
+            SELECT
+                bg.id,
+                bg.beer_key,
+                bg.productname,
+                bg.brewery,
+                bg.abv,
+                bg.tag,
+                bg.style,
+                bg.stylecode,
+                bg.colorfrom,
+                bg.colorto,
+                bg.shortstyledesc,
+                bg.tastingnotes,
+                bg.price,
+                bg.ctype,
+                bg.allergens,
+                bg.allergens_text,
+                bg.status,
+                bg.pngpclip,
+                bg.new,
+
+                bg.pubs_serving,
+                bg.pub_ids,
+                bg.beer_instance_ids,
+                bg.locations,
+
+                COALESCE(vs.vote_count, 0) AS vote_count,
+                COALESCE(vs.avg_rating, 0) AS avg_rating,
+                COALESCE(vs.min_rating, 0) AS min_rating,
+                COALESCE(vs.max_rating, 0) AS max_rating,
+
+                CASE
+                    WHEN COALESCE(vs.vote_count, 0) = 0 THEN 0
+                    ELSE ROUND(
+                        (
+                            (
+                                COALESCE(vs.vote_count, 0)::numeric
+                                / (COALESCE(vs.vote_count, 0)::numeric + 3)
+                            ) * COALESCE(vs.avg_rating, 0)
+                        )
+                        +
+                        (
+                            (
+                                3::numeric
+                                / (COALESCE(vs.vote_count, 0)::numeric + 3)
+                            ) * gs.global_avg
+                        ),
+                        3
+                    )
+                END AS weighted_score
+
+            FROM beer_groups bg
+            CROSS JOIN global_stats gs
+            LEFT JOIN vote_stats vs ON vs.beer_key = bg.beer_key
+        ),
+
+        ranked_beers AS (
+            SELECT
+                *,
+                ROW_NUMBER() OVER (
+                    ORDER BY
+                        weighted_score DESC,
+                        vote_count DESC,
+                        avg_rating DESC,
+                        locations DESC,
+                        productname ASC
+                ) AS rank
+            FROM scored_beers
+        )
+
+        SELECT *
+        FROM ranked_beers
+        ORDER BY rank ASC;
     """)
 
     rows = db.execute(query).mappings().all()
 
     output = []
-    for r in rows:
-        d = dict(r)  # 🔥 make editable
 
-        d["pubs_serving"] = sorted(list(r["pubs_serving"]))  # no duplicates
-        d["pub_ids"]      = sorted(list(r["pub_ids"]))        # no duplicates
+    for r in rows:
+        d = dict(r)
+
+        # Convert Decimal values for JSON
+        for key, value in list(d.items()):
+            if isinstance(value, Decimal):
+                d[key] = float(value)
+
+        d["id"] = str(d["id"])
+        d["beer_key"] = str(d["beer_key"])
+
+        d["pubs_serving"] = sorted(list(d["pubs_serving"] or []))
+        d["pub_ids"] = sorted(list(d["pub_ids"] or []))
+        d["beer_instance_ids"] = sorted(list(d["beer_instance_ids"] or []))
+
+        d["locations"] = int(d["locations"] or 0)
+        d["vote_count"] = int(d["vote_count"] or 0)
+        d["avg_rating"] = float(d["avg_rating"] or 0)
+        d["min_rating"] = int(d["min_rating"] or 0)
+        d["max_rating"] = int(d["max_rating"] or 0)
+        d["weighted_score"] = float(d["weighted_score"] or 0)
+
+        d["rank"] = int(d["rank"] or 0)
+        d["rank_label"] = ordinal_label(d["rank"])
+
         output.append(d)
 
     return output
@@ -455,17 +655,25 @@ async def rate_beer_by_id(
 ):
     user = db.query(User).filter_by(id=str(current_user.id)).first()
     beer = db.query(Beer).filter_by(id=str(payload.beer_id)).first()
-    pub  = db.query(Pub).filter_by(name=payload.pub).first()
+    pub = db.query(Pub).filter_by(name=payload.pub).first()
+
+    if not user:
+        raise HTTPException(404, "User not found")
 
     if not beer:
         raise HTTPException(404, "Beer not found")
+
     if not pub:
         raise HTTPException(404, f"Pub '{payload.pub}' not found")
+
+    if payload.rating < 1 or payload.rating > 5:
+        raise HTTPException(400, "Rating must be between 1 and 5")
 
     # ============================================================
     # SAFE BASE64 → BYTEA
     # ============================================================
     image_bytes = None
+
     if payload.image_base64:
         try:
             img = payload.image_base64.strip()
@@ -478,44 +686,127 @@ async def rate_beer_by_id(
         except Exception:
             raise HTTPException(400, "Invalid base64 image format")
 
-    # ============================================================
-    # CHECK EXISTING VOTE
-    # ============================================================
-    existing = db.execute(text("""
-        SELECT id, rating 
-        FROM public.beervotes 
-        WHERE beer_id = :beer_id AND user_id = :user_id AND pub_id = :pub_id
-        LIMIT 1
-    """), {
-        "beer_id": str(payload.beer_id),
-        "user_id": str(user.id),
-        "pub_id": str(pub.id)
-    }).mappings().first()
-
     rating_str = f"{payload.rating}/5"
 
     # ============================================================
-    # NEW VOTE
+    # BUILD CANONICAL BEER KEY
+    # Same real beer = same brewery + same product name + same ABV
+    # ============================================================
+    beer_key_row = db.execute(text("""
+        SELECT
+            b.id,
+            b.pub_id,
+            b.productname,
+            b.brewery,
+            b.abv,
+            md5(
+                lower(trim(coalesce(b.brewery, ''))) || '|' ||
+                lower(trim(coalesce(b.productname, ''))) || '|' ||
+                coalesce(b.abv::text, '')
+            ) AS beer_key
+        FROM public.beers b
+        WHERE b.id = :beer_id
+        LIMIT 1
+    """), {
+        "beer_id": str(payload.beer_id)
+    }).mappings().first()
+
+    if not beer_key_row:
+        raise HTTPException(404, "Beer not found")
+
+    beer_key = beer_key_row["beer_key"]
+
+    # ============================================================
+    # CHECK EXISTING VOTE FOR SAME REAL BEER
+    #
+    # Important:
+    # This checks all beer rows that have the same canonical beer key.
+    # So if Bass exists at 5 pubs, the user only gets 1 vote for Bass.
+    # ============================================================
+    existing = db.execute(text("""
+        WITH matching_beers AS (
+            SELECT
+                b.id,
+                b.pub_id,
+                md5(
+                    lower(trim(coalesce(b.brewery, ''))) || '|' ||
+                    lower(trim(coalesce(b.productname, ''))) || '|' ||
+                    coalesce(b.abv::text, '')
+                ) AS beer_key
+            FROM public.beers b
+            WHERE b.sold_out = FALSE
+        )
+
+        SELECT
+            v.id,
+            v.rating,
+            v.beer_id,
+            v.pub_id
+        FROM public.beervotes v
+        JOIN matching_beers mb ON mb.id = v.beer_id
+        WHERE mb.beer_key = :beer_key
+          AND v.user_id = :user_id
+        ORDER BY coalesce(v.updated_at, v.created_at) DESC
+        LIMIT 1
+    """), {
+        "beer_key": beer_key,
+        "user_id": str(user.id)
+    }).mappings().first()
+
+    # ============================================================
+    # NEW VOTE FOR THIS REAL BEER
     # ============================================================
     if not existing:
         vote_id = str(uuid.uuid4())
 
         db.execute(text("""
-            INSERT INTO public.beervotes (id, beer_id, pub_id, user_id, rating, created_at)
-            VALUES (:id, :beer_id, :pub_id, :user_id, :rating, NOW())
+            INSERT INTO public.beervotes (
+                id,
+                beer_id,
+                pub_id,
+                user_id,
+                rating,
+                review,
+                created_at,
+                updated_at
+            )
+            VALUES (
+                :id,
+                :beer_id,
+                :pub_id,
+                :user_id,
+                :rating,
+                :review,
+                NOW(),
+                NOW()
+            )
         """), {
             "id": vote_id,
             "beer_id": str(payload.beer_id),
             "pub_id": str(pub.id),
             "user_id": str(user.id),
             "rating": payload.rating,
+            "review": payload.review
         })
 
-
-        # 🔥 Log rating with user_id
+        # ========================================================
+        # LOG RATING
+        # ========================================================
         db.execute(text("""
-            INSERT INTO public.logs (uuid, body, added, image, user_id)
-            VALUES (:id, :body, NOW(), :image, :user_id)
+            INSERT INTO public.logs (
+                uuid,
+                body,
+                added,
+                image,
+                user_id
+            )
+            VALUES (
+                :id,
+                :body,
+                NOW(),
+                :image,
+                :user_id
+            )
         """), {
             "id": str(uuid.uuid4()),
             "body": f"{user.user_name} rated {beer.productname} at {pub.name} {rating_str}",
@@ -523,7 +814,9 @@ async def rate_beer_by_id(
             "user_id": str(user.id)
         })
 
-        # ✅ Give user 100 credits for first vote
+        # ========================================================
+        # GIVE USER 100 CREDITS FOR FIRST VOTE ONLY
+        # ========================================================
         db.execute(text("""
             UPDATE public.accounts
             SET credits = COALESCE(credits, 0) + 100
@@ -532,11 +825,25 @@ async def rate_beer_by_id(
             "user_id": str(user.id)
         })
 
-        # 🔥 Log review separately (also with user_id)
+        # ========================================================
+        # LOG REVIEW
+        # ========================================================
         if payload.review:
             db.execute(text("""
-                INSERT INTO public.logs (uuid, body, added, image, user_id)
-                VALUES (:id, :body, NOW(), NULL, :user_id)
+                INSERT INTO public.logs (
+                    uuid,
+                    body,
+                    added,
+                    image,
+                    user_id
+                )
+                VALUES (
+                    :id,
+                    :body,
+                    NOW(),
+                    NULL,
+                    :user_id
+                )
             """), {
                 "id": str(uuid.uuid4()),
                 "body": f'{user.user_name} reviewed {beer.productname} at {pub.name}, they said:\n"{payload.review}"',
@@ -544,24 +851,60 @@ async def rate_beer_by_id(
             })
 
         db.commit()
-        return {"success": True, "action": "new_rating", "rating": payload.rating}
+
+        return {
+            "success": True,
+            "action": "new_rating",
+            "rating": payload.rating,
+            "beer_id": str(payload.beer_id),
+            "pub_id": str(pub.id),
+            "beer_key": beer_key,
+            "credits_awarded": 100
+        }
 
     # ============================================================
-    # UPDATE EXISTING VOTE
+    # UPDATE EXISTING VOTE FOR SAME REAL BEER
+    #
+    # Important:
+    # We update the existing vote rather than adding another vote.
+    # We also move the vote to the currently selected pub/beer row,
+    # so the log still reflects where the user rated it.
     # ============================================================
     db.execute(text("""
         UPDATE public.beervotes
-        SET rating = :rating, updated_at = NOW()
+        SET
+            beer_id = :beer_id,
+            pub_id = :pub_id,
+            rating = :rating,
+            review = :review,
+            updated_at = NOW()
         WHERE id = :id
     """), {
+        "beer_id": str(payload.beer_id),
+        "pub_id": str(pub.id),
         "rating": payload.rating,
-        "id": existing["id"]
+        "review": payload.review,
+        "id": str(existing["id"])
     })
 
-    # 🔥 Log rating update
+    # ============================================================
+    # LOG RATING UPDATE
+    # ============================================================
     db.execute(text("""
-        INSERT INTO public.logs (uuid, body, added, image, user_id)
-        VALUES (:id, :body, NOW(), :image, :user_id)
+        INSERT INTO public.logs (
+            uuid,
+            body,
+            added,
+            image,
+            user_id
+        )
+        VALUES (
+            :id,
+            :body,
+            NOW(),
+            :image,
+            :user_id
+        )
     """), {
         "id": str(uuid.uuid4()),
         "body": f"{user.user_name} updated rating for {beer.productname} at {pub.name} to {rating_str}",
@@ -569,11 +912,25 @@ async def rate_beer_by_id(
         "user_id": str(user.id)
     })
 
-    # 🔥 Log review update if provided
+    # ============================================================
+    # LOG REVIEW UPDATE
+    # ============================================================
     if payload.review:
         db.execute(text("""
-            INSERT INTO public.logs (uuid, body, added, image, user_id)
-            VALUES (:id, :body, NOW(), NULL, :user_id)
+            INSERT INTO public.logs (
+                uuid,
+                body,
+                added,
+                image,
+                user_id
+            )
+            VALUES (
+                :id,
+                :body,
+                NOW(),
+                NULL,
+                :user_id
+            )
         """), {
             "id": str(uuid.uuid4()),
             "body": f'{user.user_name} reviewed {beer.productname} at {pub.name}, they said:\n"{payload.review}"',
@@ -581,4 +938,13 @@ async def rate_beer_by_id(
         })
 
     db.commit()
-    return {"success": True, "action": "updated_rating", "rating": payload.rating}
+
+    return {
+        "success": True,
+        "action": "updated_rating",
+        "rating": payload.rating,
+        "beer_id": str(payload.beer_id),
+        "pub_id": str(pub.id),
+        "beer_key": beer_key,
+        "credits_awarded": 0
+    }

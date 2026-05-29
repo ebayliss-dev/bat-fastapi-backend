@@ -469,6 +469,48 @@ async def verify_otp(payload: dict, db: Session = Depends(get_db)):
         "magic_link": db_token.magic_link
     }
 
+import random
+import secrets
+import string
+
+
+def generate_beer_username() -> str:
+    adjectives = [
+        "Hoppy", "Malty", "Golden", "Toasty", "Frothy", "Crisp",
+        "Bitter", "Smooth", "Cloudy", "Barrel", "Amber", "Crafty",
+        "Zesty", "Bold", "Rustic", "Fresh", "Foamy", "Velvety",
+        "Smoky", "Rich", "Dark", "Light", "Copper", "Hazey",
+        "Juicy", "Dank", "Roasted", "Spiced", "Wild", "Mellow",
+        "Sharp", "Tangy", "Lively", "Bubbly", "Chilled", "Stormy",
+        "Brave", "Mighty", "Noble", "Lucky", "Cheerful", "Jolly",
+        "Muddy", "Sunny", "Moonlit", "Twisted", "Tiny", "Massive",
+        "Ancient", "Modern", "Secret", "Magic", "Proper", "Local",
+        "Festival", "Nomad", "Wobbly", "Tipsy", "Thirsty", "Merry",
+        "Brewed", "Fermented", "Casky", "Crafted", "Yeasty", "Grainy",
+    ]
+
+    nouns = [
+        "Pint", "Ale", "Stout", "Lager", "Porter", "Brew",
+        "Keg", "Cask", "Tankard", "Hops", "Malt", "Tap",
+        "Barrel", "Stein", "Growler", "Brewery", "Cellar", "Tavern",
+        "Pub", "Pump", "Firkin", "Mash", "Wort", "Yeast",
+        "Bitter", "Pilsner", "Saison", "Draught", "Craft", "Can",
+        "Bottle", "Glass", "Foam", "Head", "Sip", "Round",
+        "Session", "Trail", "Badge", "Flight", "Taproom", "Festival",
+        "Barman", "Landlord", "Hopback", "Grain", "Copper", "Tun",
+        "Brewdog", "Mug", "Cider", "Shandy", "Cooler", "Chalice",
+        "Lupulin", "Fermenter", "Caskmate", "Beerhouse", "Drinker",
+    ]
+
+    suffix = ''.join(
+        secrets.choice(string.ascii_uppercase + string.digits)
+        for _ in range(6)
+    )
+
+    number = secrets.randbelow(900000) + 100000
+
+    return f"{random.choice(adjectives)}{random.choice(nouns)}{number}{suffix}"
+
 @router.get("/magic-login")
 async def magic_login(token: str, db: Session = Depends(get_db)):
 
@@ -484,16 +526,17 @@ async def magic_login(token: str, db: Session = Depends(get_db)):
     if record.used:
         raise HTTPException(status_code=400, detail="Token already used")
 
+    # Optional expiry check
     # if record.expires_at < datetime.utcnow():
     #     raise HTTPException(status_code=400, detail="Token expired")
 
-    # ✅ verify signed token
+    # Verify signed token
     try:
         mobile = verify_magic_token(token)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid token")
 
-    # ✅ NORMALISE NUMBER
+    # Normalise mobile number
     mobile = mobile.replace(" ", "")
 
     if mobile.startswith("+"):
@@ -502,20 +545,39 @@ async def magic_login(token: str, db: Session = Depends(get_db)):
     if mobile.startswith("07"):
         mobile = "44" + mobile[1:]
 
-    # ✅ FIND EXISTING USER ONLY
+    # Try to find existing user
     user = crud.get_user_by_mobile(db, mobile)
 
+    # If user does not exist, create one
     if not user:
-        raise HTTPException(
-            status_code=404,
-            detail="Account not found"
+        username = generate_beer_username()
+
+        # Make sure generated username is unique
+        while db.query(User).filter(User.user_name == username).first():
+            username = generate_beer_username()
+
+        user = User(
+            number=mobile,
+            firstname="Beer",
+            surname="Lover",
+            user_name=username,
+            password=None,
+            credits=0,
+            total_credits=0,
+            bonus=False,
+            created_on=datetime.utcnow(),
+            last_login=datetime.utcnow(),
         )
 
-    # ✅ mark token used
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    else:
+        crud.update_user_last_login(db, user.id)
+
+    # Mark token as used
     record.used = True
     db.commit()
-
-    crud.update_user_last_login(db, user.id)
 
     access_token = create_access_token({"sub": str(user.id)})
     refresh_token = create_refresh_token({"sub": str(user.id)})
@@ -524,4 +586,11 @@ async def magic_login(token: str, db: Session = Depends(get_db)):
         "access_token": access_token,
         "refresh_token": refresh_token,
         "token_type": "bearer",
+        "user": {
+            "id": str(user.id),
+            "number": user.number,
+            "user_name": user.user_name,
+            "firstname": user.firstname,
+            "surname": user.surname,
+        }
     }

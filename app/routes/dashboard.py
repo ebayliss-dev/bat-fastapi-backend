@@ -240,14 +240,15 @@ class Advert(BaseModel):
 class AdvertResponse(BaseModel):
     adverts: List[Advert]
 
-
 @router.get("/adverts", response_model=AdvertResponse)
 async def get_adverts(db: Session = Depends(get_db)):
 
     query = text("""
         SELECT id, image, body
         FROM public.news
-        ORDER BY id DESC
+        WHERE image IS NOT NULL
+          AND image <> ''
+        ORDER BY RANDOM()
     """)
 
     rows = db.execute(query).mappings().all()
@@ -255,16 +256,11 @@ async def get_adverts(db: Session = Depends(get_db)):
     adverts = []
 
     for row in rows:
-        if not row["image"]:
-            continue
-
         image_data = row["image"]
 
-        # If already full data URI, use as-is
         if image_data.startswith("data:"):
             b64_image = image_data
         else:
-            # Assume raw base64 from DB
             b64_image = f"data:image/jpeg;base64,{image_data}"
 
         adverts.append(

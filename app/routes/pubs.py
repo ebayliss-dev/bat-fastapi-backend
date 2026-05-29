@@ -95,46 +95,57 @@ def get_all_pubs(
 
     query = """
     WITH open_badges AS (
+        SELECT 
+            blu.pub_id,
+            blu.user_id,
+            blu.event_id
+        FROM public.badges_link_user blu
+        JOIN public.events e ON e.id = blu.event_id
+        WHERE e.isopen = TRUE
+    ),
+
+    badge_counts AS (
+        SELECT 
+            pub_id,
+            COUNT(*) AS badges_count
+        FROM open_badges
+        GROUP BY pub_id
+    ),
+
+    user_badges AS (
+        SELECT 
+            pub_id
+        FROM open_badges
+        WHERE user_id = :user_id
+    )
+
     SELECT 
-        blu.pub_id,
-        blu.user_id,
-        blu.event_id
-    FROM public.badges_link_user blu
-    JOIN public.events e ON e.id = blu.event_id
-    WHERE e.isopen = TRUE
-),
-
-badge_counts AS (
-    SELECT 
-        pub_id,
-        COUNT(*) AS badges_count
-    FROM open_badges
-    GROUP BY pub_id
-),
-
-user_badges AS (
-    SELECT 
-        pub_id
-    FROM open_badges
-    WHERE user_id = :user_id
-)
-
-SELECT 
-    p.*,
-    COALESCE(b.badges_count, 0) AS badges_count,
-    (ub.pub_id IS NOT NULL) AS user_has_badge
-FROM public.pubs p
-LEFT JOIN badge_counts b ON b.pub_id = p.id
-LEFT JOIN user_badges ub ON ub.pub_id = p.id
-ORDER BY p.index ASC;
-
+        p.*,
+        COALESCE(b.badges_count, 0) AS badges_count,
+        (ub.pub_id IS NOT NULL) AS user_has_badge
+    FROM public.pubs p
+    LEFT JOIN badge_counts b ON b.pub_id = p.id
+    LEFT JOIN user_badges ub ON ub.pub_id = p.id
+    WHERE p.id != :excluded_pub_id
+    ORDER BY p.index ASC;
     """
 
     try:
-        rows = db.execute(text(query), {"user_id": user_id}).mappings().all()
-        return rows  # FastAPI automatically jsonify’s mappings
+        rows = db.execute(
+            text(query),
+            {
+                "user_id": user_id,
+                "excluded_pub_id": "05ad023f-e798-4c0d-a79a-315c586871b4",
+            },
+        ).mappings().all()
+
+        return rows
+
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database query failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Database query failed: {str(e)}"
+        )
 
 
 @router.post("/get")
