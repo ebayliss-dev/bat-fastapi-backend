@@ -140,46 +140,6 @@ def ping(db: Session = Depends(get_db)):
         # If DB is down or connection pool isn't ready, signal unhealthy
         return
 
-import random
-from datetime import datetime
-from fastapi import HTTPException, Depends
-from sqlalchemy.orm import Session
-
-# Example beer-themed username generator
-def generate_beer_username() -> str:
-    adjectives = [
-        "Hoppy",
-        "Malty",
-        "Golden",
-        "Toasty",
-        "Frothy",
-        "Crisp",
-        "Bitter",
-        "Smooth",
-        "Cloudy",
-        "Barrel",
-        "Amber",
-        "Crafty",
-    ]
-
-    nouns = [
-        "Pint",
-        "Ale",
-        "Stout",
-        "Lager",
-        "Porter",
-        "Brew",
-        "Keg",
-        "Cask",
-        "Tankard",
-        "Hops",
-        "Malt",
-        "Tap",
-    ]
-
-    number = random.randint(1000, 9999)
-
-    return f"{random.choice(adjectives)}{random.choice(nouns)}{number}"
 
 @app.get("/.well-known/apple-app-site-association", include_in_schema=False)
 async def apple_app_site_association():

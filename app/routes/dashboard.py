@@ -273,22 +273,27 @@ async def get_adverts(db: Session = Depends(get_db)):
     return AdvertResponse(adverts=adverts)
 
 class LogItem(BaseModel):
+    id: str
     message: str
-    timestamp: str
+    timestamp: Optional[str]
     user_name: str
     image_base64: Optional[str] = None
     user_image_base64: Optional[str] = None
+    like_count: int = 0
+    comment_count: int = 0
+    liked_by_me: bool = False
+
 
 class LogsResponse(BaseModel):
     logs: List[LogItem]
 
-from fastapi import Query
 
 @router.get("/logs", response_model=LogsResponse)
 async def get_latest_logs(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=50),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
 ):
 
     # First page returns 3 only
@@ -301,8 +306,14 @@ async def get_latest_logs(
         offset = 3 + ((page - 2) * page_size)
 
     rows = (
-        db.query(Log, User.user_name, User.image)
-        .join(User, Log.user_id == User.id)
+        db.query(
+            Log,
+            User.user_name,
+            User.image.label("user_image"),
+            Pub.name.label("pub_name"),
+        )
+        .outerjoin(User, Log.user_id == User.id)
+        .outerjoin(Pub, Log.user_id == Pub.id)
         .order_by(Log.added.desc())
         .offset(offset)
         .limit(limit)
@@ -312,22 +323,325 @@ async def get_latest_logs(
     def encode_image(value):
         if not value:
             return None
+
+        if isinstance(value, str) and value.startswith("data:image"):
+            return value
+
         if isinstance(value, str):
-            return value  # already base64 string
-        return base64.b64encode(value).decode("utf-8")
+            return f"data:image/jpeg;base64,{value}"
 
+        try:
+            encoded = base64.b64encode(value).decode("utf-8")
+            return f"data:image/png;base64,{encoded}"
+        except Exception as e:
+            print(f"Failed to encode image: {e}")
+            return None
 
-    return {
-        "logs": [
+    logs = []
+    current_user_id = str(current_user.id)
+
+    for log, user_name, user_image, pub_name in rows:
+        log_id = str(log.uuid)
+
+        display_name = user_name or pub_name or "Unknown"
+        display_image = log.image or user_image
+
+        like_count = db.execute(
+            text("""
+                SELECT COUNT(*)
+                FROM public.log_likes
+                WHERE log_id = :log_id
+            """),
+            {"log_id": log_id}
+        ).scalar() or 0
+
+        comment_count = db.execute(
+            text("""
+                SELECT COUNT(*)
+                FROM public.log_comments
+                WHERE log_id = :log_id
+            """),
+            {"log_id": log_id}
+        ).scalar() or 0
+
+        liked_by_me = db.execute(
+            text("""
+                SELECT 1
+                FROM public.log_likes
+                WHERE log_id = :log_id
+                  AND user_id = :user_id
+                LIMIT 1
+            """),
             {
+                "log_id": log_id,
+                "user_id": current_user_id,
+            }
+        ).first() is not None
+
+        logs.append(
+            {
+                "id": log_id,
                 "message": log.body,
                 "timestamp": log.added.isoformat() if log.added else None,
-                "user_name": user_name,
-                "image_base64": encode_image(log.image),
-                "user_image_base64": encode_image(user_image),
+                "user_name": display_name,
+                "image_base64": encode_image(display_image),
+                "user_image_base64": encode_image(display_image),
+                "like_count": int(like_count),
+                "comment_count": int(comment_count),
+                "liked_by_me": liked_by_me,
             }
-            for log, user_name, user_image in rows
-        ]
+        )
+
+    return {
+        "logs": logs
+    }
+
+class LikeResponse(BaseModel):
+    liked: bool
+    like_count: int
+
+
+@router.post("/logs/{log_id}/like", response_model=LikeResponse)
+async def toggle_log_like(
+    log_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = str(current_user.id)
+
+    log_exists = db.execute(
+        text("""
+            SELECT uuid
+            FROM public.logs
+            WHERE uuid = :log_id
+        """),
+        {"log_id": log_id}
+    ).mappings().first()
+
+    if not log_exists:
+        raise HTTPException(
+            status_code=404,
+            detail="Post not found"
+        )
+
+    existing_like = db.execute(
+        text("""
+            SELECT id
+            FROM public.log_likes
+            WHERE log_id = :log_id
+              AND user_id = :user_id
+        """),
+        {
+            "log_id": log_id,
+            "user_id": user_id,
+        }
+    ).mappings().first()
+
+    if existing_like:
+        db.execute(
+            text("""
+                DELETE FROM public.log_likes
+                WHERE log_id = :log_id
+                  AND user_id = :user_id
+            """),
+            {
+                "log_id": log_id,
+                "user_id": user_id,
+            }
+        )
+        liked = False
+    else:
+        db.execute(
+            text("""
+                INSERT INTO public.log_likes (log_id, user_id)
+                VALUES (:log_id, :user_id)
+                ON CONFLICT (log_id, user_id) DO NOTHING
+            """),
+            {
+                "log_id": log_id,
+                "user_id": user_id,
+            }
+        )
+        liked = True
+
+    db.commit()
+
+    like_count = db.execute(
+        text("""
+            SELECT COUNT(*)
+            FROM public.log_likes
+            WHERE log_id = :log_id
+        """),
+        {"log_id": log_id}
+    ).scalar() or 0
+
+    return {
+        "liked": liked,
+        "like_count": int(like_count),
+    }
+
+
+class CommentCreate(BaseModel):
+    body: str
+
+
+class CommentItem(BaseModel):
+    id: str
+    body: str
+    added: Optional[str]
+    user_id: str
+    user_name: str
+    user_image_base64: Optional[str] = None
+
+
+class CommentsResponse(BaseModel):
+    comments: List[CommentItem]
+
+
+@router.get("/logs/{log_id}/comments", response_model=CommentsResponse)
+async def get_log_comments(
+    log_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    log_exists = db.execute(
+        text("""
+            SELECT uuid
+            FROM public.logs
+            WHERE uuid = :log_id
+        """),
+        {"log_id": log_id}
+    ).mappings().first()
+
+    if not log_exists:
+        raise HTTPException(
+            status_code=404,
+            detail="Post not found"
+        )
+
+    rows = db.execute(
+        text("""
+            SELECT
+                c.id,
+                c.body,
+                c.added,
+                c.user_id,
+                u.user_name,
+                u.image AS user_image
+            FROM public.log_comments c
+            LEFT JOIN public.accounts u
+              ON u.id = c.user_id
+            WHERE c.log_id = :log_id
+            ORDER BY c.added ASC
+        """),
+        {"log_id": log_id}
+    ).mappings().all()
+
+    def encode_image(value):
+        if not value:
+            return None
+
+        if isinstance(value, str) and value.startswith("data:image"):
+            return value
+
+        if isinstance(value, str):
+            return f"data:image/jpeg;base64,{value}"
+
+        try:
+            encoded = base64.b64encode(value).decode("utf-8")
+            return f"data:image/jpeg;base64,{encoded}"
+        except Exception:
+            return None
+
+    comments = []
+
+    for row in rows:
+        comments.append(
+            {
+                "id": str(row["id"]),
+                "body": row["body"],
+                "added": row["added"].isoformat() if row["added"] else None,
+                "user_id": str(row["user_id"]),
+                "user_name": row["user_name"] or "Unknown",
+                "user_image_base64": encode_image(row["user_image"]),
+            }
+        )
+
+    return {
+        "comments": comments
+    }
+
+
+@router.post("/logs/{log_id}/comments")
+async def create_log_comment(
+    log_id: str,
+    payload: CommentCreate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = str(current_user.id)
+    body = payload.body.strip()
+
+    if not body:
+        raise HTTPException(
+            status_code=400,
+            detail="Comment cannot be empty"
+        )
+
+    if len(body) > 1000:
+        raise HTTPException(
+            status_code=400,
+            detail="Comment is too long"
+        )
+
+    log_exists = db.execute(
+        text("""
+            SELECT uuid
+            FROM public.logs
+            WHERE uuid = :log_id
+        """),
+        {"log_id": log_id}
+    ).mappings().first()
+
+    if not log_exists:
+        raise HTTPException(
+            status_code=404,
+            detail="Post not found"
+        )
+
+    row = db.execute(
+        text("""
+            INSERT INTO public.log_comments (log_id, user_id, body)
+            VALUES (:log_id, :user_id, :body)
+            RETURNING id, body, added, user_id
+        """),
+        {
+            "log_id": log_id,
+            "user_id": user_id,
+            "body": body,
+        }
+    ).mappings().first()
+
+    db.commit()
+
+    comment_count = db.execute(
+        text("""
+            SELECT COUNT(*)
+            FROM public.log_comments
+            WHERE log_id = :log_id
+        """),
+        {"log_id": log_id}
+    ).scalar() or 0
+
+    return {
+        "ok": True,
+        "comment": {
+            "id": str(row["id"]),
+            "body": row["body"],
+            "added": row["added"].isoformat() if row["added"] else None,
+            "user_id": str(row["user_id"]),
+        },
+        "comment_count": int(comment_count),
     }
 
 @router.get("/leaderboard")

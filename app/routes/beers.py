@@ -1,5 +1,5 @@
 import base64
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 import hashlib
 from typing import Any, Dict, List, Optional
@@ -22,6 +22,7 @@ from jose import JWTError, jwt
 
 from app import crud
 from app.models.beers import Beer
+from app.models.logs import Log
 from app.models.pubs import Pub
 from app.models.user import User
 from app.schemas.login import LoginRequest
@@ -61,8 +62,47 @@ logger.addHandler(handler)
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
 
+async def image_to_bytes(value):
+    if not value:
+        return None
 
+    # Already bytes
+    if isinstance(value, bytes):
+        return value
 
+    # Full data URI, e.g. data:image/png;base64,...
+    if isinstance(value, str) and value.startswith("data:image"):
+        try:
+            base64_part = value.split(",", 1)[1]
+            return base64.b64decode(base64_part)
+        except Exception as e:
+            print(f"Failed to decode data URI image: {e}")
+            return None
+
+    # Image URL, e.g. https://pngclips.b-cdn.net/Kirkstall-ThreeSwords2021.png
+    if isinstance(value, str) and value.startswith("http"):
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(value, timeout=10) as resp:
+                    if resp.status != 200:
+                        print(f"Image download failed: {resp.status} - {value}")
+                        return None
+
+                    return await resp.read()
+
+        except Exception as e:
+            print(f"Failed to download image URL {value}: {e}")
+            return None
+
+    # Raw base64 fallback
+    if isinstance(value, str):
+        try:
+            return base64.b64decode(value)
+        except Exception as e:
+            print(f"Failed to decode raw base64 image: {e}")
+            return None
+
+    return None
 
 @router.get("/sync")
 async def sync_beers(db: Session = Depends(get_db)):
@@ -179,6 +219,7 @@ async def sync_beers(db: Session = Depends(get_db)):
 
             else:
                 # New beer
+                # New beer
                 beer = Beer(
                     pub_id=pub_id,
                     pumpclip=b.get("pumpclip"),
@@ -202,10 +243,32 @@ async def sync_beers(db: Session = Depends(get_db)):
                     new=True
                 )
 
-                db.add(beer)
-                db.flush()
-                seen.add(beer.id)
+                # Get pub name
+                pub = db.query(Pub).filter(Pub.id == pub_id).first()
+                pub_name = pub.name if pub else "Pub"
 
+                # Build log message
+                if b.get("status") == "Sold Out":
+                    log_message = f"{productname} has been added but is currently sold out"
+                else:
+                    log_message = f"{productname} is now available"
+
+                # Convert image to bytes for LargeBinary column
+                log_image = await image_to_bytes(b.get("pngpclip") or b.get("pumpclip"))
+
+                log = Log(
+                    uuid=uuid.uuid4(),
+                    user_id=pub.id,
+                    body=log_message,
+                    added=datetime.utcnow(),
+                    image=log_image
+                )
+
+                db.add(beer)
+                db.add(log)
+                db.flush()
+
+                seen.add(beer.id)
                 imported_count += 1
 
     # 5. Set beers missing from API as sold out
