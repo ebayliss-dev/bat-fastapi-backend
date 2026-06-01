@@ -65,6 +65,7 @@ class DashboardResponse(BaseModel):
     userFirstname: str
     userSurname: str
     userName: str
+    userDisabled: Optional[bool]
     userPoints: int
     userImage: Optional[str]
     userId: str
@@ -73,7 +74,6 @@ class DashboardResponse(BaseModel):
     totalCheckins: int
     totalCredits: int
     userRank: int
-
 
     totalBadges: int
     totalFavourites: int
@@ -130,7 +130,6 @@ async def get_business_dashboard(
             "eventId": event_id
         }).mappings().first()
 
-        print(team_score_row)
 
         team_score = team_score_row["total"] or 0
 
@@ -191,12 +190,12 @@ async def get_business_dashboard(
             VALUES (:id, :uid, :eventId, 0)
         """), {"id": new_id, "uid": str(user.id), "eventId": event_id})
         db.commit()
-
         return {
             "userId": str(user.id),
             "userFirstname": user.firstname,
             "userSurname": user.surname,
             "userName": user.user_name,
+            "userDisabled": user.disabled,
             "userPoints": 0,
             "userImage": str(user.image),
             "totalPubs": len(db.query(Pub).all()),
@@ -218,6 +217,7 @@ async def get_business_dashboard(
         "userFirstname": user.firstname,
         "userSurname": user.surname,
         "userName": user.user_name,
+        "userDisabled": user.disabled,
         "userPoints": rank_row["credits"],
         "userImage": str(user.image),
         "totalPubs": len(db.query(Pub).all()),
@@ -277,8 +277,15 @@ class LogItem(BaseModel):
     message: str
     timestamp: Optional[str]
     user_name: str
+
+    # Body/post image only.
+    # This should only be set when the log itself has an uploaded image.
     image_base64: Optional[str] = None
+
+    # User avatar/profile picture only.
+    # This should come from public.accounts.image.
     user_image_base64: Optional[str] = None
+
     like_count: int = 0
     comment_count: int = 0
     liked_by_me: bool = False
@@ -292,9 +299,11 @@ class LogsResponse(BaseModel):
 async def get_latest_logs(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=50),
+    mine_only: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
+    current_user_id = str(current_user.id)
 
     # First page returns 3 only
     if page == 1:
@@ -302,10 +311,9 @@ async def get_latest_logs(
         offset = 0
     else:
         limit = page_size
-        # Skip first 3, then paginate remaining
         offset = 3 + ((page - 2) * page_size)
 
-    rows = (
+    query = (
         db.query(
             Log,
             User.user_name,
@@ -314,6 +322,13 @@ async def get_latest_logs(
         )
         .outerjoin(User, Log.user_id == User.id)
         .outerjoin(Pub, Log.user_id == Pub.id)
+    )
+
+    if mine_only:
+        query = query.filter(Log.user_id == current_user_id)
+
+    rows = (
+        query
         .order_by(Log.added.desc())
         .offset(offset)
         .limit(limit)
@@ -324,27 +339,33 @@ async def get_latest_logs(
         if not value:
             return None
 
-        if isinstance(value, str) and value.startswith("data:image"):
-            return value
-
         if isinstance(value, str):
-            return f"data:image/jpeg;base64,{value}"
+            trimmed = value.strip()
+
+            if not trimmed:
+                return None
+
+            if trimmed.startswith("data:image"):
+                return trimmed
+
+            return f"data:image/jpeg;base64,{trimmed}"
 
         try:
             encoded = base64.b64encode(value).decode("utf-8")
-            return f"data:image/png;base64,{encoded}"
+            return f"data:image/jpeg;base64,{encoded}"
         except Exception as e:
             print(f"Failed to encode image: {e}")
             return None
 
     logs = []
-    current_user_id = str(current_user.id)
 
     for log, user_name, user_image, pub_name in rows:
         log_id = str(log.uuid)
 
         display_name = user_name or pub_name or "Unknown"
-        display_image = log.image or user_image
+
+        log_image = getattr(log, "image", None)
+        user_avatar = user_image
 
         like_count = db.execute(
             text("""
@@ -381,11 +402,16 @@ async def get_latest_logs(
         logs.append(
             {
                 "id": log_id,
-                "message": log.body,
+                "message": log.body or "",
                 "timestamp": log.added.isoformat() if log.added else None,
                 "user_name": display_name,
-                "image_base64": encode_image(display_image),
-                "user_image_base64": encode_image(display_image),
+
+                # Body image: only image attached to the post/log.
+                "image_base64": encode_image(log_image),
+
+                # Avatar image: only the user's profile image.
+                "user_image_base64": encode_image(user_avatar),
+
                 "like_count": int(like_count),
                 "comment_count": int(comment_count),
                 "liked_by_me": liked_by_me,
@@ -394,6 +420,127 @@ async def get_latest_logs(
 
     return {
         "logs": logs
+    }
+
+class LogCreateRequest(BaseModel):
+    body: str
+    image_base64: Optional[str] = None
+
+
+class LogCreateResponse(BaseModel):
+    ok: bool
+    log: LogItem
+
+@router.post("/logs", response_model=LogCreateResponse)
+async def create_manual_log(
+    payload: LogCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = str(current_user.id)
+
+    body = payload.body.strip() if payload.body else ""
+
+    if not body and not payload.image_base64:
+        raise HTTPException(
+            status_code=400,
+            detail="Please enter a message or upload a photo"
+        )
+
+    if len(body) > 1000:
+        raise HTTPException(
+            status_code=400,
+            detail="Log message is too long"
+        )
+
+    from base64 import b64decode
+
+    clean_image = None
+
+    if payload.image_base64:
+        try:
+            image_value = payload.image_base64.strip()
+
+            # Accept both:
+            # data:image/jpeg;base64,/9j...
+            # /9j...
+            if image_value.startswith("data:"):
+                image_value = image_value.split(",", 1)[1]
+
+            clean_image = b64decode(image_value)
+
+        except Exception:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid base64 image format"
+            )
+
+    new_log_id = str(uuid.uuid4())
+
+    row = db.execute(
+        text("""
+            INSERT INTO public.logs (
+                uuid,
+                user_id,
+                body,
+                image,
+                added
+            )
+            VALUES (
+                :uuid,
+                :user_id,
+                :body,
+                :image,
+                NOW()
+            )
+            RETURNING uuid, user_id, body, image, added
+        """),
+        {
+            "uuid": new_log_id,
+            "user_id": user_id,
+            "body": body,
+            "image": clean_image,
+        }
+    ).mappings().first()
+
+    db.commit()
+
+    user = db.query(User).filter(User.id == user_id).first()
+
+    def encode_image(value):
+        if not value:
+            return None
+
+        if isinstance(value, str):
+            trimmed = value.strip()
+
+            if not trimmed:
+                return None
+
+            if trimmed.startswith("data:image"):
+                return trimmed
+
+            return f"data:image/jpeg;base64,{trimmed}"
+
+        try:
+            encoded = base64.b64encode(value).decode("utf-8")
+            return f"data:image/jpeg;base64,{encoded}"
+        except Exception:
+            return None
+
+    return {
+        "ok": True,
+        "log": {
+            "id": str(row["uuid"]),
+            "message": row["body"] or "",
+            "timestamp": row["added"].isoformat() if row["added"] else None,
+            "user_name": user.user_name if user else "Unknown",
+            "image_base64": encode_image(row["image"]),
+            "user_image_base64": encode_image(user.image if user else None),
+            "like_count": 0,
+            "comment_count": 0,
+            "liked_by_me": False,
+        }
     }
 
 class LikeResponse(BaseModel):

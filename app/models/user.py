@@ -43,6 +43,7 @@ class User(Base):
 
     image = Column(String, nullable=True)
     push_id = Column(String, nullable=True)
+    disabled = Column(Boolean, nullable=True)
 
     # Properties for compatibility with the API
     @property
