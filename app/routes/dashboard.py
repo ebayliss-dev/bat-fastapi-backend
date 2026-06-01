@@ -278,22 +278,92 @@ class LogItem(BaseModel):
     timestamp: Optional[str]
     user_name: str
 
-    # Body/post image only.
-    # This should only be set when the log itself has an uploaded image.
     image_base64: Optional[str] = None
-
-    # User avatar/profile picture only.
-    # This should come from public.accounts.image.
     user_image_base64: Optional[str] = None
 
     like_count: int = 0
     comment_count: int = 0
     liked_by_me: bool = False
+    can_delete: bool = False
+
 
 
 class LogsResponse(BaseModel):
     logs: List[LogItem]
 
+
+from uuid import UUID
+from fastapi import HTTPException, Depends
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+@router.delete("/logs/{log_id}")
+def delete_log(
+    log_id: UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    user_id = str(current_user.id)
+
+    row = db.execute(
+        text("""
+            SELECT uuid, user_id
+            FROM public.logs
+            WHERE uuid = :log_id
+            LIMIT 1
+        """),
+        {
+            "log_id": str(log_id),
+        },
+    ).mappings().first()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Post not found")
+
+    if str(row["user_id"]) != user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="You can only delete your own posts"
+        )
+
+    db.execute(
+        text("""
+            DELETE FROM public.log_comments
+            WHERE log_id = :log_id
+        """),
+        {
+            "log_id": str(log_id),
+        },
+    )
+
+    db.execute(
+        text("""
+            DELETE FROM public.log_likes
+            WHERE log_id = :log_id
+        """),
+        {
+            "log_id": str(log_id),
+        },
+    )
+
+    db.execute(
+        text("""
+            DELETE FROM public.logs
+            WHERE uuid = :log_id
+              AND user_id = :user_id
+        """),
+        {
+            "log_id": str(log_id),
+            "user_id": user_id,
+        },
+    )
+
+    db.commit()
+
+    return {
+        "deleted": True,
+        "log_id": str(log_id),
+    }
 
 @router.get("/logs", response_model=LogsResponse)
 async def get_latest_logs(
@@ -415,6 +485,7 @@ async def get_latest_logs(
                 "like_count": int(like_count),
                 "comment_count": int(comment_count),
                 "liked_by_me": liked_by_me,
+                "can_delete": str(log.user_id) == str(current_user.id),
             }
         )
 
