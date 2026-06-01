@@ -135,7 +135,11 @@ def get_all_pubs(
             text(query),
             {
                 "user_id": user_id,
-                "excluded_pub_id": "05ad023f-e798-4c0d-a79a-315c586871b4",
+                "excluded_pub_ids": [
+                    "05ad023f-e798-4c0d-a79a-315c586871b4",
+                    "03f59c8b-f58f-4b05-b7b6-b1bed902afec",
+                    "2a7e2db1-ccef-49d8-98f6-18225f9806ee",
+                ],
             },
         ).mappings().all()
 
