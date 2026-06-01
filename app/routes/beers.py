@@ -248,10 +248,19 @@ async def sync_beers(db: Session = Depends(get_db)):
                 pub_name = pub.name if pub else "Pub"
 
                 # Build log message
-                if b.get("status") == "Sold Out":
+                # Build log message
+                status = (b.get("status") or "").strip()
+
+                if status == "Available":
+                    log_message = f"{productname} is now available"
+                elif status == "Coming Soon":
+                    log_message = f"{productname} has been added and is coming soon"
+                elif status == "Delivered":
+                    log_message = f"{productname} has been delivered"
+                elif status == "Sold Out":
                     log_message = f"{productname} has been added but is currently sold out"
                 else:
-                    log_message = f"{productname} is now available"
+                    log_message = f"{productname} has been added with status: {status or 'Unknown'}"
 
                 # Convert image to bytes for LargeBinary column
                 log_image = await image_to_bytes(b.get("pngpclip") or b.get("pumpclip"))
