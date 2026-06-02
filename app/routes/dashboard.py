@@ -231,7 +231,91 @@ async def get_business_dashboard(
         "totalBadges": 13,
     }
 
+@router.get("/adverts/stats")
+def get_advert_stats(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    rows = db.execute(
+        text("""
+            SELECT
+                advert_id,
+                advert_type,
+                url,
 
+                COUNT(*) FILTER (WHERE event_type = 'view') AS views,
+                COUNT(*) FILTER (WHERE event_type = 'click') AS clicks,
+
+                CASE
+                    WHEN COUNT(*) FILTER (WHERE event_type = 'view') = 0 THEN 0
+                    ELSE ROUND(
+                        (
+                            COUNT(*) FILTER (WHERE event_type = 'click')::numeric
+                            /
+                            COUNT(*) FILTER (WHERE event_type = 'view')::numeric
+                        ) * 100,
+                        2
+                    )
+                END AS click_through_rate
+
+            FROM public.advert_events
+            GROUP BY advert_id, advert_type, url
+            ORDER BY views DESC, clicks DESC
+        """)
+    ).mappings().all()
+
+    return {
+        "stats": [dict(row) for row in rows]
+    }
+
+class AdvertTrackRequest(BaseModel):
+    advert_id: str
+    advert_type: str
+    event_type: str
+    url: Optional[str] = None
+
+
+@router.post("/adverts/track")
+def track_advert_event(
+    payload: AdvertTrackRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if payload.advert_type not in ["fullscreen", "carousel"]:
+        return {"success": False, "message": "Invalid advert_type"}
+
+    if payload.event_type not in ["view", "click"]:
+        return {"success": False, "message": "Invalid event_type"}
+
+    db.execute(
+        text("""
+            INSERT INTO public.advert_events (
+                advert_id,
+                advert_type,
+                event_type,
+                url,
+                user_id
+            )
+            VALUES (
+                :advert_id,
+                :advert_type,
+                :event_type,
+                :url,
+                :user_id
+            )
+        """),
+        {
+            "advert_id": payload.advert_id,
+            "advert_type": payload.advert_type,
+            "event_type": payload.event_type,
+            "url": payload.url,
+            "user_id": str(current_user.id) if current_user else None,
+        },
+    )
+
+    db.commit()
+
+    return {"success": True}
 
 class Advert(BaseModel):
     image: str
@@ -955,3 +1039,4 @@ async def waitlist(data: WaitlistRequest, db: Session = Depends(get_db)):
     db.commit()
 
     return {"ok": True}
+
