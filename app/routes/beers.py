@@ -134,23 +134,31 @@ async def sync_beers(db: Session = Depends(get_db)):
     imported_count = 0
     updated_count = 0
     deleted_cider_count = 0
+    deleted_thatchers_count = 0
     seen = set()
 
-    # 3. Delete any existing ciders already in the DB
-    existing_ciders = (
+    # 3. Delete any existing ciders or Thatchers already in the DB
+    existing_blocked_beers = (
         db.query(Beer)
         .filter(
             or_(
                 Beer.ctype.ilike("cider"),
-                Beer.productname.ilike("%cider%")
+                Beer.productname.ilike("%cider%"),
+                Beer.brewery.ilike("%Thatchers%")
             )
         )
         .all()
     )
 
-    for cider in existing_ciders:
-        db.delete(cider)
-        deleted_cider_count += 1
+    for blocked_beer in existing_blocked_beers:
+        brewery_check = (blocked_beer.brewery or "").strip().lower()
+
+        if "thatchers" in brewery_check:
+            deleted_thatchers_count += 1
+        else:
+            deleted_cider_count += 1
+
+        db.delete(blocked_beer)
 
     db.flush()
 
@@ -168,9 +176,14 @@ async def sync_beers(db: Session = Depends(get_db)):
 
             ctype_check = (b.get("ctype") or "").strip().lower()
             productname_check = (b.get("productname") or "").strip().lower()
+            brewery_check = (b.get("brewery") or "").strip().lower()
 
-            # Skip ciders completely
-            if ctype_check == "cider" or "cider" in productname_check:
+            # Skip ciders and anything from Thatchers completely
+            if (
+                ctype_check == "cider"
+                or "cider" in productname_check
+                or "thatchers" in brewery_check
+            ):
                 continue
 
             productname = b.get("productname")
@@ -219,7 +232,6 @@ async def sync_beers(db: Session = Depends(get_db)):
 
             else:
                 # New beer
-                # New beer
                 beer = Beer(
                     pub_id=pub_id,
                     pumpclip=b.get("pumpclip"),
@@ -247,7 +259,6 @@ async def sync_beers(db: Session = Depends(get_db)):
                 pub = db.query(Pub).filter(Pub.id == pub_id).first()
                 pub_name = pub.name if pub else "Pub"
 
-                # Build log message
                 # Build log message
                 status = (b.get("status") or "").strip()
 
@@ -297,7 +308,8 @@ async def sync_beers(db: Session = Depends(get_db)):
         "imported": imported_count,
         "updated": updated_count,
         "deleted_ciders": deleted_cider_count,
-        "total_changed": imported_count + updated_count + deleted_cider_count,
+        "deleted_thatchers": deleted_thatchers_count,
+        "total_changed": imported_count + updated_count + deleted_cider_count + deleted_thatchers_count,
     }
 
 
