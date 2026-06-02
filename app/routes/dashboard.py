@@ -238,13 +238,36 @@ def get_advert_stats(
 ):
     rows = db.execute(
         text("""
-            SELECT
-                advert_id,
-                advert_type,
-                url,
+            WITH normalised_events AS (
+                SELECT
+                    advert_type,
+                    event_type,
+                    advert_id,
 
-                COUNT(*) FILTER (WHERE event_type = 'view') AS views,
-                COUNT(*) FILTER (WHERE event_type = 'click') AS clicks,
+                    CASE
+                        WHEN url IS NOT NULL AND TRIM(url) <> '' THEN TRIM(url)
+
+                        -- Fallback for older fullscreen advert tracking
+                        WHEN advert_type = 'fullscreen' AND advert_id = 'fullscreen_0'
+                            THEN 'https://burtonbridgeandheritage.co.uk'
+
+                        WHEN advert_type = 'fullscreen' AND advert_id = 'fullscreen_1'
+                            THEN 'https://www.allsopps.com'
+
+                        ELSE 'Unknown website'
+                    END AS advert_url
+
+                FROM public.advert_events
+            )
+
+            SELECT
+                advert_type,
+                advert_url AS url,
+                CONCAT(advert_type, ':', advert_url) AS advert_id,
+                STRING_AGG(DISTINCT advert_id, ', ' ORDER BY advert_id) AS advert_ids,
+
+                COUNT(*) FILTER (WHERE event_type = 'view')::int AS views,
+                COUNT(*) FILTER (WHERE event_type = 'click')::int AS clicks,
 
                 CASE
                     WHEN COUNT(*) FILTER (WHERE event_type = 'view') = 0 THEN 0
@@ -256,16 +279,37 @@ def get_advert_stats(
                         ) * 100,
                         2
                     )
-                END AS click_through_rate
+                END::float AS click_through_rate
 
-            FROM public.advert_events
-            GROUP BY advert_id, advert_type, url
-            ORDER BY views DESC, clicks DESC
+            FROM normalised_events
+            GROUP BY advert_type, advert_url
+            ORDER BY
+                CASE
+                    WHEN advert_type = 'carousel' THEN 1
+                    WHEN advert_type = 'fullscreen' THEN 2
+                    ELSE 3
+                END,
+                views DESC,
+                clicks DESC,
+                advert_url ASC
         """)
     ).mappings().all()
 
+    stats = []
+
+    for row in rows:
+        stats.append({
+            "advert_id": row["advert_id"],
+            "advert_ids": row["advert_ids"],
+            "advert_type": row["advert_type"],
+            "url": row["url"],
+            "views": int(row["views"] or 0),
+            "clicks": int(row["clicks"] or 0),
+            "click_through_rate": float(row["click_through_rate"] or 0),
+        })
+    print(stats)
     return {
-        "stats": [dict(row) for row in rows]
+        "stats": stats
     }
 
 class AdvertTrackRequest(BaseModel):
