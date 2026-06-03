@@ -321,14 +321,16 @@ from fastapi import Depends
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+# Keep your existing get_db import
+# from app.database import get_db
+
 
 def ordinal_label(n: int) -> str:
     if 10 <= n % 100 <= 20:
         suffix = "th"
     else:
         suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
-
-    return f"{n}{suffix} Place"
+    return f"{n}{suffix}"
 
 
 @router.post("/all")
@@ -343,15 +345,28 @@ async def get_all_beers(db: Session = Depends(get_db)):
 
     Votes are calculated at canonical beer level, not pub level.
 
+    Sold-out handling:
+      - sold-out beers now DO appear
+      - if all instances of a beer are sold out, sold_out = true
+      - if at least one instance is available, has_available_instance = true
+      - if at least one instance is sold out, has_sold_out_instance = true
+
     Ranking:
       - one latest vote per user per real beer
-      - Bayesian weighted score for fairness
-      - beers with no votes get score 0
-      - backend returns rank and rank_label
+      - minimum 10 votes required to qualify
+      - Bayesian adjusted score using m = 20
+      - qualified beers are ranked above non-qualified beers
+      - winner is the highest adjusted score among qualified beers
     """
 
     query = text("""
-        WITH beer_instances AS (
+        WITH constants AS (
+            SELECT
+                10::numeric AS minimum_votes,
+                20::numeric AS weighting_factor
+        ),
+
+        beer_instances AS (
             SELECT
                 b.*,
 
@@ -362,7 +377,6 @@ async def get_all_beers(db: Session = Depends(get_db)):
                 ) AS beer_key
 
             FROM public.beers b
-            WHERE b.sold_out = FALSE
         ),
 
         beer_groups AS (
@@ -392,11 +406,28 @@ async def get_all_beers(db: Session = Depends(get_db)):
 
                 bool_or(bi.new) AS new,
 
+                -- Sold-out logic
+                bool_and(COALESCE(bi.sold_out, FALSE)) AS sold_out,
+                bool_or(COALESCE(bi.sold_out, FALSE)) AS has_sold_out_instance,
+                bool_or(NOT COALESCE(bi.sold_out, FALSE)) AS has_available_instance,
+
                 ARRAY_AGG(DISTINCT p.name ORDER BY p.name) AS pubs_serving,
                 ARRAY_AGG(DISTINCT p.id::text ORDER BY p.id::text) AS pub_ids,
                 ARRAY_AGG(DISTINCT bi.id::text ORDER BY bi.id::text) AS beer_instance_ids,
 
-                COUNT(DISTINCT p.id) AS locations
+                ARRAY_AGG(DISTINCT p.name ORDER BY p.name)
+                    FILTER (WHERE COALESCE(bi.sold_out, FALSE) = FALSE) AS pubs_available,
+
+                ARRAY_AGG(DISTINCT p.name ORDER BY p.name)
+                    FILTER (WHERE COALESCE(bi.sold_out, FALSE) = TRUE) AS pubs_sold_out,
+
+                COUNT(DISTINCT p.id) AS locations,
+
+                COUNT(DISTINCT p.id)
+                    FILTER (WHERE COALESCE(bi.sold_out, FALSE) = FALSE) AS available_locations,
+
+                COUNT(DISTINCT p.id)
+                    FILTER (WHERE COALESCE(bi.sold_out, FALSE) = TRUE) AS sold_out_locations
 
             FROM beer_instances bi
             JOIN public.pubs p ON p.id = bi.pub_id
@@ -474,31 +505,50 @@ async def get_all_beers(db: Session = Depends(get_db)):
                 bg.pngpclip,
                 bg.new,
 
+                bg.sold_out,
+                bg.has_sold_out_instance,
+                bg.has_available_instance,
+
                 bg.pubs_serving,
                 bg.pub_ids,
                 bg.beer_instance_ids,
+                bg.pubs_available,
+                bg.pubs_sold_out,
+
                 bg.locations,
+                bg.available_locations,
+                bg.sold_out_locations,
 
                 COALESCE(vs.vote_count, 0) AS vote_count,
                 COALESCE(vs.avg_rating, 0) AS avg_rating,
                 COALESCE(vs.min_rating, 0) AS min_rating,
                 COALESCE(vs.max_rating, 0) AS max_rating,
 
+                gs.global_avg,
+
+                CASE
+                    WHEN COALESCE(vs.vote_count, 0) >= c.minimum_votes THEN TRUE
+                    ELSE FALSE
+                END AS qualified,
+
+                c.minimum_votes::int AS minimum_votes_required,
+                c.weighting_factor::int AS weighting_factor,
+
                 CASE
                     WHEN COALESCE(vs.vote_count, 0) = 0 THEN 0
                     ELSE ROUND(
                         (
                             (
-                                COALESCE(vs.vote_count, 0)::numeric
-                                / (COALESCE(vs.vote_count, 0)::numeric + 3)
-                            ) * COALESCE(vs.avg_rating, 0)
-                        )
-                        +
-                        (
+                                COALESCE(vs.vote_count, 0)::numeric * COALESCE(vs.avg_rating, 0)
+                            )
+                            +
                             (
-                                3::numeric
-                                / (COALESCE(vs.vote_count, 0)::numeric + 3)
-                            ) * gs.global_avg
+                                c.weighting_factor * gs.global_avg
+                            )
+                        )
+                        /
+                        (
+                            COALESCE(vs.vote_count, 0)::numeric + c.weighting_factor
                         ),
                         3
                     )
@@ -506,20 +556,24 @@ async def get_all_beers(db: Session = Depends(get_db)):
 
             FROM beer_groups bg
             CROSS JOIN global_stats gs
+            CROSS JOIN constants c
             LEFT JOIN vote_stats vs ON vs.beer_key = bg.beer_key
         ),
 
         ranked_beers AS (
             SELECT
                 *,
+
                 ROW_NUMBER() OVER (
                     ORDER BY
+                        qualified DESC,
                         weighted_score DESC,
                         vote_count DESC,
                         avg_rating DESC,
                         locations DESC,
                         productname ASC
                 ) AS rank
+
             FROM scored_beers
         )
 
@@ -547,12 +601,28 @@ async def get_all_beers(db: Session = Depends(get_db)):
         d["pub_ids"] = sorted(list(d["pub_ids"] or []))
         d["beer_instance_ids"] = sorted(list(d["beer_instance_ids"] or []))
 
+        d["pubs_available"] = sorted(list(d["pubs_available"] or []))
+        d["pubs_sold_out"] = sorted(list(d["pubs_sold_out"] or []))
+
         d["locations"] = int(d["locations"] or 0)
+        d["available_locations"] = int(d["available_locations"] or 0)
+        d["sold_out_locations"] = int(d["sold_out_locations"] or 0)
+
         d["vote_count"] = int(d["vote_count"] or 0)
         d["avg_rating"] = float(d["avg_rating"] or 0)
         d["min_rating"] = int(d["min_rating"] or 0)
         d["max_rating"] = int(d["max_rating"] or 0)
+
+        d["global_avg"] = float(d["global_avg"] or 0)
         d["weighted_score"] = float(d["weighted_score"] or 0)
+
+        d["qualified"] = bool(d["qualified"])
+        d["minimum_votes_required"] = int(d["minimum_votes_required"] or 10)
+        d["weighting_factor"] = int(d["weighting_factor"] or 20)
+
+        d["sold_out"] = bool(d["sold_out"])
+        d["has_sold_out_instance"] = bool(d["has_sold_out_instance"])
+        d["has_available_instance"] = bool(d["has_available_instance"])
 
         d["rank"] = int(d["rank"] or 0)
         d["rank_label"] = ordinal_label(d["rank"])
