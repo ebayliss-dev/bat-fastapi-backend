@@ -103,362 +103,246 @@ async def image_to_bytes(value):
             return None
 
     return None
-from datetime import datetime, timezone
-from decimal import Decimal, InvalidOperation
-from typing import Any, Dict, Set
-
-import aiohttp
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-
-# Make sure these imports match your project
-# from app.database import get_db
-# from app.models import Beer, Pub
-
-router = APIRouter()
-
-
-def normalise_text(value: Any) -> str:
-    return str(value or "").strip()
-
-
-def normalise_key_text(value: Any) -> str:
-    return normalise_text(value).lower()
-
-
-def normalise_abv_for_key(value: Any) -> str:
-    """
-    Keeps ABV matching stable between RAF payload values and DB Numeric values.
-
-    Examples:
-      4.2   -> 4.20
-      4.20  -> 4.20
-      None  -> ''
-    """
-    if value is None or value == "":
-        return ""
-
-    try:
-        return str(Decimal(str(value)).quantize(Decimal("0.01")))
-    except (InvalidOperation, ValueError, TypeError):
-        return normalise_text(value)
-
-
-def make_beer_key(brewery: Any, productname: Any, abv: Any) -> str:
-    """
-    Same idea as your /all beer grouping:
-    brewery + productname + abv = one real beer.
-    """
-    return (
-        f"{normalise_key_text(brewery)}|"
-        f"{normalise_key_text(productname)}|"
-        f"{normalise_abv_for_key(abv)}"
-    )
-
-
-def get_first(data: Dict[str, Any], *keys: str, default: Any = None) -> Any:
-    """
-    RAF payloads can be inconsistent, so this lets us support multiple possible field names.
-    """
-    for key in keys:
-        value = data.get(key)
-        if value is not None and value != "":
-            return value
-    return default
-
-
-def parse_bool(value: Any) -> bool:
-    if isinstance(value, bool):
-        return value
-
-    if value is None:
-        return False
-
-    return str(value).strip().lower() in {
-        "true",
-        "1",
-        "yes",
-        "y",
-        "sold",
-        "sold out",
-        "sold-out",
-    }
-
-
-def is_sold_status(status: Any, sold_out: Any = None) -> bool:
-    status_text = normalise_key_text(status)
-
-    return (
-        parse_bool(sold_out)
-        or "sold" in status_text
-        or "sold out" in status_text
-        or "sold-out" in status_text
-    )
-
-
-def should_skip_beer(brewery: Any, productname: Any, ctype: Any = None) -> bool:
-    """
-    Keep your existing exclusion rules here.
-    This example removes Thatchers and obvious cider entries.
-    """
-    brewery_text = normalise_key_text(brewery)
-    product_text = normalise_key_text(productname)
-    ctype_text = normalise_key_text(ctype)
-
-    if "thatchers" in brewery_text:
-        return True
-
-    if "cider" in brewery_text or "cider" in product_text or "cider" in ctype_text:
-        return True
-
-    return False
-
-
 @router.get("/sync")
 async def sync_beers(db: Session = Depends(get_db)):
-    """
-    Sync beers from RealAleFinder.
 
-    Important behaviour:
-      - RAF beers currently returned are inserted/updated.
-      - Existing beers for the same pub that are NOT returned anymore are NOT deleted.
-      - Instead, those old beers are marked SOLD-OUT.
-      - This lets users still rate historical beers, but prevents them showing as available.
-    """
-
+    # 1. Load all pubs + tokens
     pubs = db.query(Pub).all()
     token_map = {p.token: p.id for p in pubs if p.token}
+    pub_map = {p.id: p for p in pubs}
 
     if not token_map:
-        raise HTTPException(status_code=404, detail="No pub tokens found")
+        raise HTTPException(404, "No pub tokens found")
 
     token_string = ",".join(token_map.keys())
     url = f"https://www.realalefinder.com/beerboard/aggregate.php?tokens={token_string}"
+    print(url)
 
+    # 2. Fetch data from Real Ale Finder
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as resp:
                 if resp.status != 200:
-                    raise HTTPException(
-                        status_code=resp.status,
-                        detail="Upstream RealAleFinder error",
-                    )
+                    raise HTTPException(resp.status, "Upstream RealAleFinder error")
 
                 payload = await resp.json()
 
-    except HTTPException:
-        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"RAF sync failed: {str(e)}")
+        raise HTTPException(500, str(e))
 
     if "pubs" not in payload:
-        raise HTTPException(status_code=500, detail="Invalid RealAleFinder format")
+        raise HTTPException(500, "Invalid RealAleFinder format")
 
     imported_count = 0
     updated_count = 0
-    marked_sold_out_count = 0
-    skipped_count = 0
+    deleted_cider_count = 0
+    deleted_thatchers_count = 0
+    removed_from_raf_count = 0
 
-    now = datetime.now(timezone.utc)
+    # This will contain the local DB IDs of every beer that RAF returned
+    seen = set()
 
-    seen_keys_by_pub: Dict[Any, Set[str]] = {}
+    # 3. Delete any existing ciders or Thatchers already in the DB
+    existing_blocked_beers = (
+        db.query(Beer)
+        .filter(
+            or_(
+                Beer.ctype.ilike("cider"),
+                Beer.productname.ilike("%cider%"),
+                Beer.brewery.ilike("%Thatchers%")
+            )
+        )
+        .all()
+    )
 
-    try:
-        for raf_pub in payload.get("pubs", []):
-            token = get_first(raf_pub, "token", "pubtoken", "id", default=None)
+    for blocked_beer in existing_blocked_beers:
+        brewery_check = (blocked_beer.brewery or "").strip().lower()
 
-            if token not in token_map:
+        if "thatchers" in brewery_check:
+            deleted_thatchers_count += 1
+        else:
+            deleted_cider_count += 1
+
+        db.delete(blocked_beer)
+
+    db.flush()
+
+    # 4. Loop through each pub returned by RAF
+    for pub_entry in payload["pubs"]:
+        token = pub_entry.get("token")
+        pub_id = token_map.get(token)
+
+        if not pub_id:
+            continue
+
+        beers = pub_entry.get("data", {}).get("beerlist", [])
+
+        for b in beers:
+
+            ctype_check = (b.get("ctype") or "").strip().lower()
+            productname_check = (b.get("productname") or "").strip().lower()
+            brewery_check = (b.get("brewery") or "").strip().lower()
+
+            # Skip ciders and anything from Thatchers completely
+            if (
+                ctype_check == "cider"
+                or "cider" in productname_check
+                or "thatchers" in brewery_check
+            ):
                 continue
 
-            pub_id = token_map[token]
-            seen_keys_by_pub.setdefault(pub_id, set())
+            productname = b.get("productname")
+            brewery = b.get("brewery")
 
-            raf_beers = (
-                raf_pub.get("beers")
-                or raf_pub.get("beerboard")
-                or raf_pub.get("products")
-                or []
+            if not productname or not brewery:
+                continue
+
+            raf_status = (b.get("status") or "").strip()
+
+            # Match beer by pub + product name + brewery
+            existing = (
+                db.query(Beer)
+                .filter(
+                    and_(
+                        Beer.pub_id == pub_id,
+                        Beer.productname == productname,
+                        Beer.brewery == brewery
+                    )
+                )
+                .first()
             )
 
-            existing_pub_beers = db.query(Beer).filter(
-                Beer.pub_id == pub_id
-            ).all()
+            if existing:
+                seen.add(existing.id)
 
-            existing_by_key = {
-                make_beer_key(existing.brewery, existing.productname, existing.abv): existing
-                for existing in existing_pub_beers
-            }
+                # Update beer from RAF because RAF is the source of truth
+                existing.pumpclip = b.get("pumpclip")
+                existing.pngpclip = b.get("pngpclip")
+                existing.abv = b.get("abv")
+                existing.tastingnotes = b.get("tastingnotes")
+                existing.price = b.get("price")
+                existing.tag = b.get("tag")
+                existing.ctype = b.get("ctype")
+                existing.style = b.get("style")
+                existing.stylecode = b.get("stylecode")
+                existing.colorfrom = b.get("colorfrom")
+                existing.colorto = b.get("colorto")
+                existing.shortstyledesc = b.get("shortstyledesc")
+                existing.status = raf_status
+                existing.allergens = b.get("allergens")
+                existing.allergens_text = b.get("allergens_text")
 
-            for item in raf_beers:
-                brewery = get_first(item, "brewery", "breweryname", "producer", default="")
-                productname = get_first(item, "productname", "name", "beer", "title", default="")
-                abv = get_first(item, "abv", "strength", default=None)
-                ctype = get_first(item, "ctype", "type", "category", default=None)
+                existing.sold_out = raf_status.lower() == "sold out"
+                existing.new = False
 
-                if not brewery or not productname:
-                    skipped_count += 1
-                    continue
+                updated_count += 1
 
-                if should_skip_beer(brewery, productname, ctype):
-                    skipped_count += 1
-                    continue
-
-                beer_key = make_beer_key(brewery, productname, abv)
-                seen_keys_by_pub[pub_id].add(beer_key)
-
-                status = get_first(item, "status", "availability", default="Available")
-                sold_out = is_sold_status(status, get_first(item, "sold_out", "soldout", default=False))
-
-                beer = existing_by_key.get(beer_key)
-
-                if beer is None:
-                    beer = Beer(
-                        pub_id=pub_id,
-                        brewery=normalise_text(brewery),
-                        productname=normalise_text(productname),
-                        abv=Decimal(str(abv)).quantize(Decimal("0.01")) if abv not in [None, ""] else None,
-                    )
-                    db.add(beer)
-                    imported_count += 1
-                else:
-                    updated_count += 1
-
-                beer.brewery = normalise_text(brewery)
-                beer.productname = normalise_text(productname)
-
-                if abv not in [None, ""]:
-                    try:
-                        beer.abv = Decimal(str(abv)).quantize(Decimal("0.01"))
-                    except Exception:
-                        pass
-
-                beer.status = "Sold Out" if sold_out else normalise_text(status or "Available")
-                beer.sold_out = sold_out
-
-                # If it appears in RAF again, it is not stale anymore.
-                # If your model has these columns, they will be updated.
-                if hasattr(beer, "last_seen_raf_at"):
-                    beer.last_seen_raf_at = now
-
-                if hasattr(beer, "removed_from_raf"):
-                    beer.removed_from_raf = False
-
-                if hasattr(beer, "updated_at"):
-                    beer.updated_at = now
-
-                # Existing fields from your /all endpoint.
-                if hasattr(beer, "new"):
-                    beer.new = parse_bool(get_first(item, "new", "is_new", default=False))
-
-                if hasattr(beer, "pumpclip"):
-                    beer.pumpclip = get_first(item, "pumpclip", "pump_clip", default=beer.pumpclip)
-
-                if hasattr(beer, "pngpclip"):
-                    beer.pngpclip = get_first(item, "pngpclip", "png_pclip", "image", "image_url", default=beer.pngpclip)
-
-                if hasattr(beer, "tag"):
-                    beer.tag = get_first(item, "tag", default=beer.tag)
-
-                if hasattr(beer, "style"):
-                    beer.style = get_first(item, "style", default=beer.style)
-
-                if hasattr(beer, "stylecode"):
-                    beer.stylecode = get_first(item, "stylecode", "style_code", default=beer.stylecode)
-
-                if hasattr(beer, "colorfrom"):
-                    beer.colorfrom = get_first(item, "colorfrom", "color_from", default=beer.colorfrom)
-
-                if hasattr(beer, "colorto"):
-                    beer.colorto = get_first(item, "colorto", "color_to", default=beer.colorto)
-
-                if hasattr(beer, "shortstyledesc"):
-                    beer.shortstyledesc = get_first(
-                        item,
-                        "shortstyledesc",
-                        "short_style_desc",
-                        default=beer.shortstyledesc,
-                    )
-
-                if hasattr(beer, "tastingnotes"):
-                    beer.tastingnotes = get_first(
-                        item,
-                        "tastingnotes",
-                        "tasting_notes",
-                        "description",
-                        default=beer.tastingnotes,
-                    )
-
-                if hasattr(beer, "price"):
-                    price = get_first(item, "price", default=None)
-                    if price not in [None, ""]:
-                        try:
-                            beer.price = Decimal(str(price))
-                        except Exception:
-                            pass
-
-                if hasattr(beer, "ctype"):
-                    beer.ctype = normalise_text(ctype or beer.ctype)
-
-                if hasattr(beer, "allergens"):
-                    beer.allergens = get_first(item, "allergens", default=beer.allergens)
-
-                if hasattr(beer, "allergens_text"):
-                    beer.allergens_text = get_first(
-                        item,
-                        "allergens_text",
-                        "allergenstext",
-                        default=beer.allergens_text,
-                    )
-
-            # IMPORTANT PART:
-            # Anything already in our DB for this pub but missing from RAF now gets marked SOLD-OUT.
-            seen_keys = seen_keys_by_pub.get(pub_id, set())
-
-            for existing in existing_pub_beers:
-                existing_key = make_beer_key(
-                    existing.brewery,
-                    existing.productname,
-                    existing.abv,
+            else:
+                # New beer from RAF
+                beer = Beer(
+                    pub_id=pub_id,
+                    pumpclip=b.get("pumpclip"),
+                    pngpclip=b.get("pngpclip"),
+                    brewery=brewery,
+                    productname=productname,
+                    abv=b.get("abv"),
+                    tastingnotes=b.get("tastingnotes"),
+                    price=b.get("price"),
+                    tag=b.get("tag"),
+                    ctype=b.get("ctype"),
+                    style=b.get("style"),
+                    stylecode=b.get("stylecode"),
+                    colorfrom=b.get("colorfrom"),
+                    colorto=b.get("colorto"),
+                    shortstyledesc=b.get("shortstyledesc"),
+                    status=raf_status,
+                    allergens=b.get("allergens"),
+                    allergens_text=b.get("allergens_text"),
+                    sold_out=raf_status.lower() == "sold out",
+                    new=True
                 )
 
-                if existing_key not in seen_keys:
-                    already_sold = (
-                        is_sold_status(existing.status, existing.sold_out)
-                        or bool(getattr(existing, "sold_out", False))
-                    )
+                db.add(beer)
+                db.flush()
 
-                    existing.status = "Sold Out"
-                    existing.sold_out = True
+                seen.add(beer.id)
+                imported_count += 1
 
-                    if hasattr(existing, "new"):
-                        existing.new = False
+                # Get pub name
+                pub = pub_map.get(pub_id)
+                pub_name = pub.name if pub else "Pub"
 
-                    if hasattr(existing, "removed_from_raf"):
-                        existing.removed_from_raf = True
+                # Build log message
+                if raf_status == "Available":
+                    log_message = f"{productname} is now available at {pub_name}"
+                elif raf_status == "Coming Soon":
+                    log_message = f"{productname} has been added and is coming soon at {pub_name}"
+                elif raf_status == "Delivered":
+                    log_message = f"{productname} has been delivered to {pub_name}"
+                elif raf_status == "Sold Out":
+                    log_message = f"{productname} has been added but is currently sold out at {pub_name}"
+                else:
+                    log_message = f"{productname} has been added at {pub_name} with status: {raf_status or 'Unknown'}"
 
-                    if hasattr(existing, "updated_at"):
-                        existing.updated_at = now
+                # Convert image to bytes for LargeBinary column
+                log_image = await image_to_bytes(b.get("pngpclip") or b.get("pumpclip"))
 
-                    if not already_sold:
-                        marked_sold_out_count += 1
+                log = Log(
+                    uuid=uuid.uuid4(),
+                    user_id=pub_id,
+                    body=log_message,
+                    added=datetime.utcnow(),
+                    image=log_image
+                )
 
-        db.commit()
+                db.add(log)
 
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Beer sync database update failed: {str(e)}")
+    # 5. Cross-reference local DB against RAF
+    #
+    # RAF is the source of truth.
+    # If a beer exists locally for one of the RAF pubs we synced,
+    # but RAF did not return it in this sync, the pub has removed it from RAF.
+    # We keep the beer in the DB, but mark it as Sold Out.
+    all_local_beers_for_synced_pubs = (
+        db.query(Beer)
+        .filter(Beer.pub_id.in_(list(token_map.values())))
+        .all()
+    )
 
+    for beer in all_local_beers_for_synced_pubs:
+        if beer.id not in seen:
+
+            was_previously_active = (
+                (beer.status or "").strip().lower() != "sold out"
+                or beer.sold_out is not True
+            )
+
+            beer.status = "Sold Out"
+            beer.sold_out = True
+            beer.new = False
+
+            if was_previously_active:
+                removed_from_raf_count += 1
+
+    db.commit()
+
+    # 6. Return summary
     return {
-        "success": True,
-        "message": "Beer sync completed",
-        "imported_count": imported_count,
-        "updated_count": updated_count,
-        "marked_sold_out_count": marked_sold_out_count,
-        "skipped_count": skipped_count,
-        "pubs_checked": len(seen_keys_by_pub),
+        "status": "success",
+        "pubs_processed": len(token_map),
+        "imported": imported_count,
+        "updated": updated_count,
+        "removed_from_raf_marked_sold_out": removed_from_raf_count,
+        "deleted_ciders": deleted_cider_count,
+        "deleted_thatchers": deleted_thatchers_count,
+        "total_changed": (
+            imported_count
+            + updated_count
+            + removed_from_raf_count
+            + deleted_cider_count
+            + deleted_thatchers_count
+        ),
     }
-
-
 class BeerOut(RootModel[list[Dict[str, Any]]]):
     pass
 
@@ -484,19 +368,25 @@ async def get_all_beers(db: Session = Depends(get_db)):
     """
     Returns one row per real beer, not one row per pub beer instance.
 
-    Also returns pub_instances, which contains the exact beer row for each pub:
-      - beer_id
-      - pub_id
-      - pub_name
-      - status
-      - sold_out
-      - new
-      - pngpclip
-      - pumpclip
+    A beer is treated as the same beer when:
+      - brewery matches case-insensitively
+      - productname matches case-insensitively
+      - abv matches
 
-    This means:
-      - beer list can still use grouped/ranked beers
-      - pub page can filter pub_instances by pub_id and show the correct status
+    Votes are calculated at canonical beer level, not pub level.
+
+    Sold-out handling:
+      - sold-out beers now DO appear
+      - if all instances of a beer are sold out, sold_out = true
+      - if at least one instance is available, has_available_instance = true
+      - if at least one instance is sold out, has_sold_out_instance = true
+
+    Ranking:
+      - one latest vote per user per real beer
+      - minimum 10 votes required to qualify
+      - Bayesian adjusted score using m = 20
+      - qualified beers are ranked above non-qualified beers
+      - winner is the highest adjusted score among qualified beers
     """
 
     query = text("""
@@ -523,116 +413,54 @@ async def get_all_beers(db: Session = Depends(get_db)):
             SELECT
                 bi.beer_key,
 
-                -- Representative values for the grouped beer
-                (ARRAY_AGG(bi.id ORDER BY bi.created_at DESC, bi.id DESC))[1] AS id,
-                (ARRAY_AGG(bi.productname ORDER BY bi.created_at DESC, bi.id DESC))[1] AS productname,
-                (ARRAY_AGG(bi.brewery ORDER BY bi.created_at DESC, bi.id DESC))[1] AS brewery,
-                (ARRAY_AGG(bi.abv ORDER BY bi.created_at DESC, bi.id DESC))[1] AS abv,
+                -- Representative ID for frontend navigation
+                (ARRAY_AGG(bi.id ORDER BY bi.created_at DESC))[1] AS id,
 
-                (ARRAY_AGG(bi.tag ORDER BY bi.created_at DESC, bi.id DESC))[1] AS tag,
-                (ARRAY_AGG(bi.style ORDER BY bi.created_at DESC, bi.id DESC))[1] AS style,
-                (ARRAY_AGG(bi.stylecode ORDER BY bi.created_at DESC, bi.id DESC))[1] AS stylecode,
-                (ARRAY_AGG(bi.colorfrom ORDER BY bi.created_at DESC, bi.id DESC))[1] AS colorfrom,
-                (ARRAY_AGG(bi.colorto ORDER BY bi.created_at DESC, bi.id DESC))[1] AS colorto,
-                (ARRAY_AGG(bi.shortstyledesc ORDER BY bi.created_at DESC, bi.id DESC))[1] AS shortstyledesc,
-                (ARRAY_AGG(bi.tastingnotes ORDER BY bi.created_at DESC, bi.id DESC))[1] AS tastingnotes,
-                (ARRAY_AGG(bi.price ORDER BY bi.created_at DESC, bi.id DESC))[1] AS price,
-                (ARRAY_AGG(bi.ctype ORDER BY bi.created_at DESC, bi.id DESC))[1] AS ctype,
-                (ARRAY_AGG(bi.allergens ORDER BY bi.created_at DESC, bi.id DESC))[1] AS allergens,
-                (ARRAY_AGG(bi.allergens_text ORDER BY bi.created_at DESC, bi.id DESC))[1] AS allergens_text,
-                (ARRAY_AGG(bi.status ORDER BY bi.created_at DESC, bi.id DESC))[1] AS status,
-                (ARRAY_AGG(bi.pngpclip ORDER BY bi.created_at DESC, bi.id DESC))[1] AS pngpclip,
-                (ARRAY_AGG(bi.pumpclip ORDER BY bi.created_at DESC, bi.id DESC))[1] AS pumpclip,
+                (ARRAY_AGG(bi.productname ORDER BY bi.created_at DESC))[1] AS productname,
+                (ARRAY_AGG(bi.brewery ORDER BY bi.created_at DESC))[1] AS brewery,
+                (ARRAY_AGG(bi.abv ORDER BY bi.created_at DESC))[1] AS abv,
 
-                bool_or(COALESCE(bi.new, FALSE)) AS new,
+                (ARRAY_AGG(bi.tag ORDER BY bi.created_at DESC))[1] AS tag,
+                (ARRAY_AGG(bi.style ORDER BY bi.created_at DESC))[1] AS style,
+                (ARRAY_AGG(bi.stylecode ORDER BY bi.created_at DESC))[1] AS stylecode,
+                (ARRAY_AGG(bi.colorfrom ORDER BY bi.created_at DESC))[1] AS colorfrom,
+                (ARRAY_AGG(bi.colorto ORDER BY bi.created_at DESC))[1] AS colorto,
+                (ARRAY_AGG(bi.shortstyledesc ORDER BY bi.created_at DESC))[1] AS shortstyledesc,
+                (ARRAY_AGG(bi.tastingnotes ORDER BY bi.created_at DESC))[1] AS tastingnotes,
+                (ARRAY_AGG(bi.price ORDER BY bi.created_at DESC))[1] AS price,
+                (ARRAY_AGG(bi.ctype ORDER BY bi.created_at DESC))[1] AS ctype,
+                (ARRAY_AGG(bi.allergens ORDER BY bi.created_at DESC))[1] AS allergens,
+                (ARRAY_AGG(bi.allergens_text ORDER BY bi.created_at DESC))[1] AS allergens_text,
+                (ARRAY_AGG(bi.status ORDER BY bi.created_at DESC))[1] AS status,
+                (ARRAY_AGG(bi.pngpclip ORDER BY bi.created_at DESC))[1] AS pngpclip,
 
-                -- Group-level status helpers
+                bool_or(bi.new) AS new,
+
+                -- Sold-out logic
                 bool_and(COALESCE(bi.sold_out, FALSE)) AS sold_out,
+                bool_or(COALESCE(bi.sold_out, FALSE)) AS has_sold_out_instance,
+                bool_or(NOT COALESCE(bi.sold_out, FALSE)) AS has_available_instance,
 
-                bool_or(
-                    lower(coalesce(bi.status, '')) LIKE '%available%'
-                    OR (
-                        lower(coalesce(bi.status, '')) NOT LIKE '%coming%'
-                        AND lower(coalesce(bi.status, '')) NOT LIKE '%sold%'
-                        AND COALESCE(bi.sold_out, FALSE) = FALSE
-                    )
-                ) AS has_available_instance,
-
-                bool_or(
-                    lower(coalesce(bi.status, '')) LIKE '%coming%'
-                ) AS has_coming_soon_instance,
-
-                bool_or(
-                    lower(coalesce(bi.status, '')) LIKE '%sold%'
-                    OR COALESCE(bi.sold_out, FALSE) = TRUE
-                ) AS has_sold_out_instance,
-
-                ARRAY_AGG(DISTINCT COALESCE(p.name, 'Unknown Pub') ORDER BY COALESCE(p.name, 'Unknown Pub')) AS pubs_serving,
-                ARRAY_AGG(DISTINCT bi.pub_id::text ORDER BY bi.pub_id::text) AS pub_ids,
+                ARRAY_AGG(DISTINCT p.name ORDER BY p.name) AS pubs_serving,
+                ARRAY_AGG(DISTINCT p.id::text ORDER BY p.id::text) AS pub_ids,
                 ARRAY_AGG(DISTINCT bi.id::text ORDER BY bi.id::text) AS beer_instance_ids,
 
-                -- This is the important bit for the pub page.
-                -- It preserves the exact beer row/status for each pub.
-                JSONB_AGG(
-                    DISTINCT JSONB_BUILD_OBJECT(
-                        'beer_id', bi.id::text,
-                        'pub_id', bi.pub_id::text,
-                        'pub_name', COALESCE(p.name, 'Unknown Pub'),
-                        'status', bi.status,
-                        'sold_out', COALESCE(bi.sold_out, FALSE),
-                        'new', COALESCE(bi.new, FALSE),
-                        'pngpclip', bi.pngpclip,
-                        'pumpclip', bi.pumpclip,
-                        'created_at', bi.created_at
-                    )
-                ) AS pub_instances,
+                ARRAY_AGG(DISTINCT p.name ORDER BY p.name)
+                    FILTER (WHERE COALESCE(bi.sold_out, FALSE) = FALSE) AS pubs_available,
 
-                ARRAY_AGG(DISTINCT COALESCE(p.name, 'Unknown Pub') ORDER BY COALESCE(p.name, 'Unknown Pub'))
-                    FILTER (
-                        WHERE lower(coalesce(bi.status, '')) LIKE '%available%'
-                           OR (
-                                lower(coalesce(bi.status, '')) NOT LIKE '%coming%'
-                                AND lower(coalesce(bi.status, '')) NOT LIKE '%sold%'
-                                AND COALESCE(bi.sold_out, FALSE) = FALSE
-                           )
-                    ) AS pubs_available,
+                ARRAY_AGG(DISTINCT p.name ORDER BY p.name)
+                    FILTER (WHERE COALESCE(bi.sold_out, FALSE) = TRUE) AS pubs_sold_out,
 
-                ARRAY_AGG(DISTINCT COALESCE(p.name, 'Unknown Pub') ORDER BY COALESCE(p.name, 'Unknown Pub'))
-                    FILTER (
-                        WHERE lower(coalesce(bi.status, '')) LIKE '%coming%'
-                    ) AS pubs_coming_soon,
+                COUNT(DISTINCT p.id) AS locations,
 
-                ARRAY_AGG(DISTINCT COALESCE(p.name, 'Unknown Pub') ORDER BY COALESCE(p.name, 'Unknown Pub'))
-                    FILTER (
-                        WHERE lower(coalesce(bi.status, '')) LIKE '%sold%'
-                           OR COALESCE(bi.sold_out, FALSE) = TRUE
-                    ) AS pubs_sold_out,
+                COUNT(DISTINCT p.id)
+                    FILTER (WHERE COALESCE(bi.sold_out, FALSE) = FALSE) AS available_locations,
 
-                COUNT(DISTINCT bi.pub_id) AS locations,
-
-                COUNT(DISTINCT bi.pub_id)
-                    FILTER (
-                        WHERE lower(coalesce(bi.status, '')) LIKE '%available%'
-                           OR (
-                                lower(coalesce(bi.status, '')) NOT LIKE '%coming%'
-                                AND lower(coalesce(bi.status, '')) NOT LIKE '%sold%'
-                                AND COALESCE(bi.sold_out, FALSE) = FALSE
-                           )
-                    ) AS available_locations,
-
-                COUNT(DISTINCT bi.pub_id)
-                    FILTER (
-                        WHERE lower(coalesce(bi.status, '')) LIKE '%coming%'
-                    ) AS coming_soon_locations,
-
-                COUNT(DISTINCT bi.pub_id)
-                    FILTER (
-                        WHERE lower(coalesce(bi.status, '')) LIKE '%sold%'
-                           OR COALESCE(bi.sold_out, FALSE) = TRUE
-                    ) AS sold_out_locations
+                COUNT(DISTINCT p.id)
+                    FILTER (WHERE COALESCE(bi.sold_out, FALSE) = TRUE) AS sold_out_locations
 
             FROM beer_instances bi
-            LEFT JOIN public.pubs p ON p.id = bi.pub_id
+            JOIN public.pubs p ON p.id = bi.pub_id
             GROUP BY bi.beer_key
         ),
 
@@ -705,28 +533,20 @@ async def get_all_beers(db: Session = Depends(get_db)):
                 bg.allergens_text,
                 bg.status,
                 bg.pngpclip,
-                bg.pumpclip,
                 bg.new,
 
                 bg.sold_out,
-                bg.has_available_instance,
-                bg.has_coming_soon_instance,
                 bg.has_sold_out_instance,
+                bg.has_available_instance,
 
                 bg.pubs_serving,
                 bg.pub_ids,
                 bg.beer_instance_ids,
-
-                -- IMPORTANT: pass this through to the final response
-                bg.pub_instances,
-
                 bg.pubs_available,
-                bg.pubs_coming_soon,
                 bg.pubs_sold_out,
 
                 bg.locations,
                 bg.available_locations,
-                bg.coming_soon_locations,
                 bg.sold_out_locations,
 
                 COALESCE(vs.vote_count, 0) AS vote_count,
@@ -749,8 +569,7 @@ async def get_all_beers(db: Session = Depends(get_db)):
                     ELSE ROUND(
                         (
                             (
-                                COALESCE(vs.vote_count, 0)::numeric
-                                * COALESCE(vs.avg_rating, 0)
+                                COALESCE(vs.vote_count, 0)::numeric * COALESCE(vs.avg_rating, 0)
                             )
                             +
                             (
@@ -759,8 +578,7 @@ async def get_all_beers(db: Session = Depends(get_db)):
                         )
                         /
                         (
-                            COALESCE(vs.vote_count, 0)::numeric
-                            + c.weighting_factor
+                            COALESCE(vs.vote_count, 0)::numeric + c.weighting_factor
                         ),
                         3
                     )
@@ -775,6 +593,7 @@ async def get_all_beers(db: Session = Depends(get_db)):
         ranked_beers AS (
             SELECT
                 *,
+
                 ROW_NUMBER() OVER (
                     ORDER BY
                         qualified DESC,
@@ -784,6 +603,7 @@ async def get_all_beers(db: Session = Depends(get_db)):
                         locations DESC,
                         productname ASC
                 ) AS rank
+
             FROM scored_beers
         )
 
@@ -799,6 +619,7 @@ async def get_all_beers(db: Session = Depends(get_db)):
     for r in rows:
         d = dict(r)
 
+        # Convert Decimal values for JSON
         for key, value in list(d.items()):
             if isinstance(value, Decimal):
                 d[key] = float(value)
@@ -810,16 +631,11 @@ async def get_all_beers(db: Session = Depends(get_db)):
         d["pub_ids"] = sorted(list(d["pub_ids"] or []))
         d["beer_instance_ids"] = sorted(list(d["beer_instance_ids"] or []))
 
-        # This is required for the pub page.
-        d["pub_instances"] = d.get("pub_instances") or []
-
         d["pubs_available"] = sorted(list(d["pubs_available"] or []))
-        d["pubs_coming_soon"] = sorted(list(d["pubs_coming_soon"] or []))
         d["pubs_sold_out"] = sorted(list(d["pubs_sold_out"] or []))
 
         d["locations"] = int(d["locations"] or 0)
         d["available_locations"] = int(d["available_locations"] or 0)
-        d["coming_soon_locations"] = int(d["coming_soon_locations"] or 0)
         d["sold_out_locations"] = int(d["sold_out_locations"] or 0)
 
         d["vote_count"] = int(d["vote_count"] or 0)
@@ -835,17 +651,17 @@ async def get_all_beers(db: Session = Depends(get_db)):
         d["weighting_factor"] = int(d["weighting_factor"] or 20)
 
         d["sold_out"] = bool(d["sold_out"])
-        d["has_available_instance"] = bool(d["has_available_instance"])
-        d["has_coming_soon_instance"] = bool(d["has_coming_soon_instance"])
         d["has_sold_out_instance"] = bool(d["has_sold_out_instance"])
+        d["has_available_instance"] = bool(d["has_available_instance"])
 
-        d["new"] = bool(d["new"])
         d["rank"] = int(d["rank"] or 0)
         d["rank_label"] = ordinal_label(d["rank"])
 
         output.append(d)
 
     return output
+
+
 
 @router.post("/get")
 async def get_beer_by_id(payload: dict, db: Session = Depends(get_db)):
