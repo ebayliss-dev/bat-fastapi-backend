@@ -338,25 +338,19 @@ async def get_all_beers(db: Session = Depends(get_db)):
     """
     Returns one row per real beer, not one row per pub beer instance.
 
-    A beer is treated as the same beer when:
-      - brewery matches case-insensitively
-      - productname matches case-insensitively
-      - abv matches
+    Also returns pub_instances, which contains the exact beer row for each pub:
+      - beer_id
+      - pub_id
+      - pub_name
+      - status
+      - sold_out
+      - new
+      - pngpclip
+      - pumpclip
 
-    Votes are calculated at canonical beer level, not pub level.
-
-    Sold-out handling:
-      - sold-out beers now DO appear
-      - if all instances of a beer are sold out, sold_out = true
-      - if at least one instance is available, has_available_instance = true
-      - if at least one instance is sold out, has_sold_out_instance = true
-
-    Ranking:
-      - one latest vote per user per real beer
-      - minimum 10 votes required to qualify
-      - Bayesian adjusted score using m = 20
-      - qualified beers are ranked above non-qualified beers
-      - winner is the highest adjusted score among qualified beers
+    This means:
+      - beer list can still use grouped/ranked beers
+      - pub page can filter pub_instances by pub_id and show the correct status
     """
 
     query = text("""
@@ -383,54 +377,116 @@ async def get_all_beers(db: Session = Depends(get_db)):
             SELECT
                 bi.beer_key,
 
-                -- Representative ID for frontend navigation
-                (ARRAY_AGG(bi.id ORDER BY bi.created_at DESC))[1] AS id,
+                -- Representative values for the grouped beer
+                (ARRAY_AGG(bi.id ORDER BY bi.created_at DESC, bi.id DESC))[1] AS id,
+                (ARRAY_AGG(bi.productname ORDER BY bi.created_at DESC, bi.id DESC))[1] AS productname,
+                (ARRAY_AGG(bi.brewery ORDER BY bi.created_at DESC, bi.id DESC))[1] AS brewery,
+                (ARRAY_AGG(bi.abv ORDER BY bi.created_at DESC, bi.id DESC))[1] AS abv,
 
-                (ARRAY_AGG(bi.productname ORDER BY bi.created_at DESC))[1] AS productname,
-                (ARRAY_AGG(bi.brewery ORDER BY bi.created_at DESC))[1] AS brewery,
-                (ARRAY_AGG(bi.abv ORDER BY bi.created_at DESC))[1] AS abv,
+                (ARRAY_AGG(bi.tag ORDER BY bi.created_at DESC, bi.id DESC))[1] AS tag,
+                (ARRAY_AGG(bi.style ORDER BY bi.created_at DESC, bi.id DESC))[1] AS style,
+                (ARRAY_AGG(bi.stylecode ORDER BY bi.created_at DESC, bi.id DESC))[1] AS stylecode,
+                (ARRAY_AGG(bi.colorfrom ORDER BY bi.created_at DESC, bi.id DESC))[1] AS colorfrom,
+                (ARRAY_AGG(bi.colorto ORDER BY bi.created_at DESC, bi.id DESC))[1] AS colorto,
+                (ARRAY_AGG(bi.shortstyledesc ORDER BY bi.created_at DESC, bi.id DESC))[1] AS shortstyledesc,
+                (ARRAY_AGG(bi.tastingnotes ORDER BY bi.created_at DESC, bi.id DESC))[1] AS tastingnotes,
+                (ARRAY_AGG(bi.price ORDER BY bi.created_at DESC, bi.id DESC))[1] AS price,
+                (ARRAY_AGG(bi.ctype ORDER BY bi.created_at DESC, bi.id DESC))[1] AS ctype,
+                (ARRAY_AGG(bi.allergens ORDER BY bi.created_at DESC, bi.id DESC))[1] AS allergens,
+                (ARRAY_AGG(bi.allergens_text ORDER BY bi.created_at DESC, bi.id DESC))[1] AS allergens_text,
+                (ARRAY_AGG(bi.status ORDER BY bi.created_at DESC, bi.id DESC))[1] AS status,
+                (ARRAY_AGG(bi.pngpclip ORDER BY bi.created_at DESC, bi.id DESC))[1] AS pngpclip,
+                (ARRAY_AGG(bi.pumpclip ORDER BY bi.created_at DESC, bi.id DESC))[1] AS pumpclip,
 
-                (ARRAY_AGG(bi.tag ORDER BY bi.created_at DESC))[1] AS tag,
-                (ARRAY_AGG(bi.style ORDER BY bi.created_at DESC))[1] AS style,
-                (ARRAY_AGG(bi.stylecode ORDER BY bi.created_at DESC))[1] AS stylecode,
-                (ARRAY_AGG(bi.colorfrom ORDER BY bi.created_at DESC))[1] AS colorfrom,
-                (ARRAY_AGG(bi.colorto ORDER BY bi.created_at DESC))[1] AS colorto,
-                (ARRAY_AGG(bi.shortstyledesc ORDER BY bi.created_at DESC))[1] AS shortstyledesc,
-                (ARRAY_AGG(bi.tastingnotes ORDER BY bi.created_at DESC))[1] AS tastingnotes,
-                (ARRAY_AGG(bi.price ORDER BY bi.created_at DESC))[1] AS price,
-                (ARRAY_AGG(bi.ctype ORDER BY bi.created_at DESC))[1] AS ctype,
-                (ARRAY_AGG(bi.allergens ORDER BY bi.created_at DESC))[1] AS allergens,
-                (ARRAY_AGG(bi.allergens_text ORDER BY bi.created_at DESC))[1] AS allergens_text,
-                (ARRAY_AGG(bi.status ORDER BY bi.created_at DESC))[1] AS status,
-                (ARRAY_AGG(bi.pngpclip ORDER BY bi.created_at DESC))[1] AS pngpclip,
+                bool_or(COALESCE(bi.new, FALSE)) AS new,
 
-                bool_or(bi.new) AS new,
-
-                -- Sold-out logic
+                -- Group-level status helpers
                 bool_and(COALESCE(bi.sold_out, FALSE)) AS sold_out,
-                bool_or(COALESCE(bi.sold_out, FALSE)) AS has_sold_out_instance,
-                bool_or(NOT COALESCE(bi.sold_out, FALSE)) AS has_available_instance,
 
-                ARRAY_AGG(DISTINCT p.name ORDER BY p.name) AS pubs_serving,
-                ARRAY_AGG(DISTINCT p.id::text ORDER BY p.id::text) AS pub_ids,
+                bool_or(
+                    lower(coalesce(bi.status, '')) LIKE '%available%'
+                    OR (
+                        lower(coalesce(bi.status, '')) NOT LIKE '%coming%'
+                        AND lower(coalesce(bi.status, '')) NOT LIKE '%sold%'
+                        AND COALESCE(bi.sold_out, FALSE) = FALSE
+                    )
+                ) AS has_available_instance,
+
+                bool_or(
+                    lower(coalesce(bi.status, '')) LIKE '%coming%'
+                ) AS has_coming_soon_instance,
+
+                bool_or(
+                    lower(coalesce(bi.status, '')) LIKE '%sold%'
+                    OR COALESCE(bi.sold_out, FALSE) = TRUE
+                ) AS has_sold_out_instance,
+
+                ARRAY_AGG(DISTINCT COALESCE(p.name, 'Unknown Pub') ORDER BY COALESCE(p.name, 'Unknown Pub')) AS pubs_serving,
+                ARRAY_AGG(DISTINCT bi.pub_id::text ORDER BY bi.pub_id::text) AS pub_ids,
                 ARRAY_AGG(DISTINCT bi.id::text ORDER BY bi.id::text) AS beer_instance_ids,
 
-                ARRAY_AGG(DISTINCT p.name ORDER BY p.name)
-                    FILTER (WHERE COALESCE(bi.sold_out, FALSE) = FALSE) AS pubs_available,
+                -- This is the important bit for the pub page.
+                -- It preserves the exact beer row/status for each pub.
+                JSONB_AGG(
+                    DISTINCT JSONB_BUILD_OBJECT(
+                        'beer_id', bi.id::text,
+                        'pub_id', bi.pub_id::text,
+                        'pub_name', COALESCE(p.name, 'Unknown Pub'),
+                        'status', bi.status,
+                        'sold_out', COALESCE(bi.sold_out, FALSE),
+                        'new', COALESCE(bi.new, FALSE),
+                        'pngpclip', bi.pngpclip,
+                        'pumpclip', bi.pumpclip,
+                        'created_at', bi.created_at
+                    )
+                ) AS pub_instances,
 
-                ARRAY_AGG(DISTINCT p.name ORDER BY p.name)
-                    FILTER (WHERE COALESCE(bi.sold_out, FALSE) = TRUE) AS pubs_sold_out,
+                ARRAY_AGG(DISTINCT COALESCE(p.name, 'Unknown Pub') ORDER BY COALESCE(p.name, 'Unknown Pub'))
+                    FILTER (
+                        WHERE lower(coalesce(bi.status, '')) LIKE '%available%'
+                           OR (
+                                lower(coalesce(bi.status, '')) NOT LIKE '%coming%'
+                                AND lower(coalesce(bi.status, '')) NOT LIKE '%sold%'
+                                AND COALESCE(bi.sold_out, FALSE) = FALSE
+                           )
+                    ) AS pubs_available,
 
-                COUNT(DISTINCT p.id) AS locations,
+                ARRAY_AGG(DISTINCT COALESCE(p.name, 'Unknown Pub') ORDER BY COALESCE(p.name, 'Unknown Pub'))
+                    FILTER (
+                        WHERE lower(coalesce(bi.status, '')) LIKE '%coming%'
+                    ) AS pubs_coming_soon,
 
-                COUNT(DISTINCT p.id)
-                    FILTER (WHERE COALESCE(bi.sold_out, FALSE) = FALSE) AS available_locations,
+                ARRAY_AGG(DISTINCT COALESCE(p.name, 'Unknown Pub') ORDER BY COALESCE(p.name, 'Unknown Pub'))
+                    FILTER (
+                        WHERE lower(coalesce(bi.status, '')) LIKE '%sold%'
+                           OR COALESCE(bi.sold_out, FALSE) = TRUE
+                    ) AS pubs_sold_out,
 
-                COUNT(DISTINCT p.id)
-                    FILTER (WHERE COALESCE(bi.sold_out, FALSE) = TRUE) AS sold_out_locations
+                COUNT(DISTINCT bi.pub_id) AS locations,
+
+                COUNT(DISTINCT bi.pub_id)
+                    FILTER (
+                        WHERE lower(coalesce(bi.status, '')) LIKE '%available%'
+                           OR (
+                                lower(coalesce(bi.status, '')) NOT LIKE '%coming%'
+                                AND lower(coalesce(bi.status, '')) NOT LIKE '%sold%'
+                                AND COALESCE(bi.sold_out, FALSE) = FALSE
+                           )
+                    ) AS available_locations,
+
+                COUNT(DISTINCT bi.pub_id)
+                    FILTER (
+                        WHERE lower(coalesce(bi.status, '')) LIKE '%coming%'
+                    ) AS coming_soon_locations,
+
+                COUNT(DISTINCT bi.pub_id)
+                    FILTER (
+                        WHERE lower(coalesce(bi.status, '')) LIKE '%sold%'
+                           OR COALESCE(bi.sold_out, FALSE) = TRUE
+                    ) AS sold_out_locations
 
             FROM beer_instances bi
-            JOIN public.pubs p ON p.id = bi.pub_id
+            LEFT JOIN public.pubs p ON p.id = bi.pub_id
             GROUP BY bi.beer_key
         ),
 
@@ -503,20 +559,28 @@ async def get_all_beers(db: Session = Depends(get_db)):
                 bg.allergens_text,
                 bg.status,
                 bg.pngpclip,
+                bg.pumpclip,
                 bg.new,
 
                 bg.sold_out,
-                bg.has_sold_out_instance,
                 bg.has_available_instance,
+                bg.has_coming_soon_instance,
+                bg.has_sold_out_instance,
 
                 bg.pubs_serving,
                 bg.pub_ids,
                 bg.beer_instance_ids,
+
+                -- IMPORTANT: pass this through to the final response
+                bg.pub_instances,
+
                 bg.pubs_available,
+                bg.pubs_coming_soon,
                 bg.pubs_sold_out,
 
                 bg.locations,
                 bg.available_locations,
+                bg.coming_soon_locations,
                 bg.sold_out_locations,
 
                 COALESCE(vs.vote_count, 0) AS vote_count,
@@ -539,7 +603,8 @@ async def get_all_beers(db: Session = Depends(get_db)):
                     ELSE ROUND(
                         (
                             (
-                                COALESCE(vs.vote_count, 0)::numeric * COALESCE(vs.avg_rating, 0)
+                                COALESCE(vs.vote_count, 0)::numeric
+                                * COALESCE(vs.avg_rating, 0)
                             )
                             +
                             (
@@ -548,7 +613,8 @@ async def get_all_beers(db: Session = Depends(get_db)):
                         )
                         /
                         (
-                            COALESCE(vs.vote_count, 0)::numeric + c.weighting_factor
+                            COALESCE(vs.vote_count, 0)::numeric
+                            + c.weighting_factor
                         ),
                         3
                     )
@@ -563,7 +629,6 @@ async def get_all_beers(db: Session = Depends(get_db)):
         ranked_beers AS (
             SELECT
                 *,
-
                 ROW_NUMBER() OVER (
                     ORDER BY
                         qualified DESC,
@@ -573,7 +638,6 @@ async def get_all_beers(db: Session = Depends(get_db)):
                         locations DESC,
                         productname ASC
                 ) AS rank
-
             FROM scored_beers
         )
 
@@ -589,7 +653,6 @@ async def get_all_beers(db: Session = Depends(get_db)):
     for r in rows:
         d = dict(r)
 
-        # Convert Decimal values for JSON
         for key, value in list(d.items()):
             if isinstance(value, Decimal):
                 d[key] = float(value)
@@ -601,11 +664,16 @@ async def get_all_beers(db: Session = Depends(get_db)):
         d["pub_ids"] = sorted(list(d["pub_ids"] or []))
         d["beer_instance_ids"] = sorted(list(d["beer_instance_ids"] or []))
 
+        # This is required for the pub page.
+        d["pub_instances"] = d.get("pub_instances") or []
+
         d["pubs_available"] = sorted(list(d["pubs_available"] or []))
+        d["pubs_coming_soon"] = sorted(list(d["pubs_coming_soon"] or []))
         d["pubs_sold_out"] = sorted(list(d["pubs_sold_out"] or []))
 
         d["locations"] = int(d["locations"] or 0)
         d["available_locations"] = int(d["available_locations"] or 0)
+        d["coming_soon_locations"] = int(d["coming_soon_locations"] or 0)
         d["sold_out_locations"] = int(d["sold_out_locations"] or 0)
 
         d["vote_count"] = int(d["vote_count"] or 0)
@@ -621,16 +689,17 @@ async def get_all_beers(db: Session = Depends(get_db)):
         d["weighting_factor"] = int(d["weighting_factor"] or 20)
 
         d["sold_out"] = bool(d["sold_out"])
-        d["has_sold_out_instance"] = bool(d["has_sold_out_instance"])
         d["has_available_instance"] = bool(d["has_available_instance"])
+        d["has_coming_soon_instance"] = bool(d["has_coming_soon_instance"])
+        d["has_sold_out_instance"] = bool(d["has_sold_out_instance"])
 
+        d["new"] = bool(d["new"])
         d["rank"] = int(d["rank"] or 0)
         d["rank_label"] = ordinal_label(d["rank"])
 
         output.append(d)
 
     return output
-
 
 @router.post("/get")
 async def get_beer_by_id(payload: dict, db: Session = Depends(get_db)):
