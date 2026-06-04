@@ -13,13 +13,14 @@ from werkzeug.security import check_password_hash
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import text
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from jose import JWTError, jwt
 
 from app import crud
+from app.models.user import User
 from app.schemas.login import LoginRequest
 from app.schemas.token import PasswordSubmitRequest, RefreshTokenRequest, Token
 from ..database import get_db
@@ -145,7 +146,10 @@ def get_all_pubs(
             },
         ).mappings().all()
 
+        update_last_login(db, str(current_user.id))
+
         return rows
+        
 
     except Exception as e:
         raise HTTPException(
@@ -153,7 +157,25 @@ def get_all_pubs(
             detail=f"Database query failed: {str(e)}"
         )
 
+def update_last_login(db: Session, user_id: str, commit: bool = True) -> None:
+    """
+    Updates the user's last_login timestamp to NOW().
 
+    Use this inside any authenticated endpoint to mark the user as active.
+    """
+
+    db.query(User).filter(
+        User.id == user_id
+    ).update(
+        {
+            User.last_login: func.now()
+        },
+        synchronize_session=False
+    )
+
+    if commit:
+        db.commit()
+        
 @router.post("/get")
 def get_pub_by_id(
     payload: dict,

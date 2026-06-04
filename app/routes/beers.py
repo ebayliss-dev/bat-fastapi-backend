@@ -364,7 +364,7 @@ def ordinal_label(n: int) -> str:
 
 
 @router.post("/all")
-async def get_all_beers(db: Session = Depends(get_db)):
+async def get_all_beers(db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     """
     Returns one row per real beer, not one row per pub beer instance.
 
@@ -729,9 +729,34 @@ async def get_all_beers(db: Session = Depends(get_db)):
 
         output.append(d)
 
+    update_last_login(db, str(current_user.id))
+
     return output
 
+from sqlalchemy.orm import Session
+from sqlalchemy.sql import func
 
+from app.models.user import User  # adjust this import to match your project
+
+
+def update_last_login(db: Session, user_id: str, commit: bool = True) -> None:
+    """
+    Updates the user's last_login timestamp to NOW().
+
+    Use this inside any authenticated endpoint to mark the user as active.
+    """
+
+    db.query(User).filter(
+        User.id == user_id
+    ).update(
+        {
+            User.last_login: func.now()
+        },
+        synchronize_session=False
+    )
+
+    if commit:
+        db.commit()
 
 @router.post("/get")
 async def get_beer_by_id(payload: dict, db: Session = Depends(get_db)):

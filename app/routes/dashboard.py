@@ -78,6 +78,32 @@ class DashboardResponse(BaseModel):
     totalBadges: int
     totalFavourites: int
 
+
+from sqlalchemy.orm import Session
+from sqlalchemy.sql import func
+
+from app.models.user import User  # adjust this import to match your project
+
+
+def update_last_login(db: Session, user_id: str, commit: bool = True) -> None:
+    """
+    Updates the user's last_login timestamp to NOW().
+
+    Use this inside any authenticated endpoint to mark the user as active.
+    """
+
+    db.query(User).filter(
+        User.id == user_id
+    ).update(
+        {
+            User.last_login: func.now()
+        },
+        synchronize_session=False
+    )
+
+    if commit:
+        db.commit()
+
 @router.post("/info", response_model=DashboardResponse)
 async def get_business_dashboard(
     search: Optional[str] = "",
@@ -99,6 +125,8 @@ async def get_business_dashboard(
     # ---------------- BEER VOTES ---------------- #
     votes = db.query(BeerVote).filter_by(user_id=str(user.id)).all()
     votes = len(votes)
+
+    update_last_login(db, str(current_user.id))
 
     # ---------------- TEAM LOOKUP ---------------- #
     team_query = text("""
@@ -295,6 +323,22 @@ def get_advert_stats(
         """)
     ).mappings().all()
 
+    active_users_30_minutes = db.execute(
+        text("""
+            SELECT COUNT(*)::int AS active_users
+            FROM public.accounts
+            WHERE last_login IS NOT NULL
+              AND last_login >= (NOW() - INTERVAL '30 minutes')
+        """)
+    ).scalar() or 0
+
+    total_beer_votes = db.execute(
+        text("""
+            SELECT COUNT(*)::int AS total_votes
+            FROM public.beervotes
+        """)
+    ).scalar() or 0
+
     stats = []
 
     for row in rows:
@@ -307,10 +351,16 @@ def get_advert_stats(
             "clicks": int(row["clicks"] or 0),
             "click_through_rate": float(row["click_through_rate"] or 0),
         })
-    print(stats)
-    return {
-        "stats": stats
+
+    response = {
+        "stats": stats,
+        "active_users_30_minutes": int(active_users_30_minutes),
+        "total_beer_votes": int(total_beer_votes),
     }
+
+    print(response)
+
+    return response
 
 class AdvertTrackRequest(BaseModel):
     advert_id: str
