@@ -31,23 +31,24 @@ def sync_beers_job():
     """
     Calls the beer sync endpoint every 5 minutes.
     """
-    try:
-        logging.info(f"Starting scheduled beer sync: {SYNC_URL}")
+    return 0
+    # try:
+    #     logging.info(f"Starting scheduled beer sync: {SYNC_URL}")
 
-        response = requests.get(
-            SYNC_URL,
-            timeout=60,
-        )
+    #     response = requests.get(
+    #         SYNC_URL,
+    #         timeout=60,
+    #     )
 
-        if response.status_code >= 400:
-            logging.error(
-                f"Beer sync failed with status {response.status_code}: {response.text}"
-            )
-        else:
-            logging.info(f"Beer sync completed successfully: {response.text}")
+    #     if response.status_code >= 400:
+    #         logging.error(
+    #             f"Beer sync failed with status {response.status_code}: {response.text}"
+    #         )
+    #     else:
+    #         logging.info(f"Beer sync completed successfully: {response.text}")
 
-    except Exception as e:
-        logging.exception(f"Beer sync job failed: {e}")
+    # except Exception as e:
+    #     logging.exception(f"Beer sync job failed: {e}")
 
 
 scheduler = BackgroundScheduler()
